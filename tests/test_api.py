@@ -20,9 +20,9 @@ from .helpers import load_fixture, status_for, sync_for
 def test_status_metadata_mapping():
     # Zone 2 fixture has a loaded track (title1/2/3 = track/artist/album).
     status = status_for(11010)
-    assert status.title1 == "13 Beaches"
-    assert status.title2 == "Lana Del Rey"
-    assert status.title3 == "Lust for Life"
+    assert status.title1 == "Coastline"
+    assert status.title2 == "Aurora"
+    assert status.title3 == "Daydream"
     assert status.total_length == 296
     assert status.image and status.image.startswith("/Artwork")
     assert status.state == "stop"
@@ -41,7 +41,7 @@ def test_volume_fixed_detection(port, fixed, volume):
 def test_syncstatus_identity():
     sync = sync_for(11020)
     assert sync.name == "Kitchen Speakers"
-    assert sync.mac == "90:56:82:0A:23:7C:11020"
+    assert sync.mac == "AA:BB:CC:00:11:22:11020"
     assert sync.model_name == "CI580"
     assert sync.brand == "NAD"
     assert sync.sync_stat == "8"  # the syncStat attribute, not the etag
@@ -49,7 +49,7 @@ def test_syncstatus_identity():
 
 def test_syncstatus_grouping_parse():
     primary = SyncStatus.from_xml(
-        '<SyncStatus etag="9" name="Primary" mac="aa" id="192.168.1.10:11000">'
+        '<SyncStatus etag="9" name="Primary" mac="aa" id="192.0.2.20:11000">'
         '<slave port="11000" id="192.168.1.11"/>'
         '<slave port="11000" id="192.168.1.12"/>'
         "</SyncStatus>"
@@ -59,10 +59,10 @@ def test_syncstatus_grouping_parse():
 
     secondary = SyncStatus.from_xml(
         '<SyncStatus etag="9" name="Secondary" mac="bb" id="192.168.1.11:11000">'
-        '<master port="11000">192.168.1.10</master>'
+        '<master port="11000">192.0.2.20</master>'
         "</SyncStatus>"
     )
-    assert secondary.master == ("192.168.1.10", 11000)
+    assert secondary.master == ("192.0.2.20", 11000)
     assert secondary.slaves == []
 
 

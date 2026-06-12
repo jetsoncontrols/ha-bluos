@@ -40,7 +40,7 @@ class LsdpRecord:
 class LsdpAnnounce:
     """A decoded Announce message."""
 
-    node_id: str  # hex, no separators (e.g. "9056820a237c")
+    node_id: str  # hex, no separators (e.g. "aabbcc001122")
     host: str  # IPv4 dotted
     records: list[LsdpRecord] = field(default_factory=list)
 

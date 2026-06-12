@@ -15,14 +15,14 @@ from custom_components.bluos.const import CONF_HOST, CONF_NODES, DOMAIN
 
 
 def _node(port: int, mac: str, name: str, model="CI580", brand="NAD") -> NodeInfo:
-    return NodeInfo("192.168.1.60", port, mac, name, model, brand)
+    return NodeInfo("192.0.2.10", port, mac, name, model, brand)
 
 
 CI580_NODES = [
-    _node(11000, "90:56:82:0A:23:7C", "BluOS Zone 1"),
-    _node(11010, "90:56:82:0A:23:7C:11010", "Zone 2"),
-    _node(11020, "90:56:82:0A:23:7C:11020", "Kitchen"),
-    _node(11030, "90:56:82:0A:23:7C:11030", "Zone 4"),
+    _node(11000, "AA:BB:CC:00:11:22", "BluOS Zone 1"),
+    _node(11010, "AA:BB:CC:00:11:22:11010", "Zone 2"),
+    _node(11020, "AA:BB:CC:00:11:22:11020", "Kitchen"),
+    _node(11030, "AA:BB:CC:00:11:22:11030", "Zone 4"),
 ]
 STANDALONE = [
     NodeInfo("192.168.1.70", 11000, "AA:BB:CC:DD:EE:FF", "Den", "PULSE", "Bluesound")
@@ -51,13 +51,13 @@ async def test_user_flow_multi_zone(hass: HomeAssistant):
 
     with _patch_enumerate(CI580_NODES):
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_HOST: "192.168.1.60"}
+            result["flow_id"], {CONF_HOST: "192.0.2.10"}
         )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "NAD CI580"  # model name for multi-zone racks
     assert len(result["data"][CONF_NODES]) == 4
-    assert result["result"].unique_id == "90:56:82:0a:23:7c"
+    assert result["result"].unique_id == "aa:bb:cc:00:11:22"
 
 
 async def test_user_flow_standalone_uses_player_name(hass: HomeAssistant):
@@ -87,7 +87,7 @@ async def test_user_flow_cannot_connect(hass: HomeAssistant):
 
 async def test_duplicate_unit_aborts(hass: HomeAssistant):
     MockConfigEntry(
-        domain=DOMAIN, unique_id="90:56:82:0a:23:7c", data={CONF_HOST: "192.168.1.60"}
+        domain=DOMAIN, unique_id="aa:bb:cc:00:11:22", data={CONF_HOST: "192.0.2.10"}
     ).add_to_hass(hass)
 
     result = await hass.config_entries.flow.async_init(
@@ -95,7 +95,7 @@ async def test_duplicate_unit_aborts(hass: HomeAssistant):
     )
     with _patch_enumerate(CI580_NODES):
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {CONF_HOST: "192.168.1.60"}
+            result["flow_id"], {CONF_HOST: "192.0.2.10"}
         )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
@@ -107,7 +107,7 @@ async def test_lsdp_discovery_confirm(hass: HomeAssistant):
             DOMAIN,
             context={"source": SOURCE_INTEGRATION_DISCOVERY},
             data={
-                CONF_HOST: "192.168.1.60",
+                CONF_HOST: "192.0.2.10",
                 CONF_NODES: [{"port": 11000, "name": "BluOS Zone 1"}],
             },
         )
@@ -117,4 +117,4 @@ async def test_lsdp_discovery_confirm(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["result"].unique_id == "90:56:82:0a:23:7c"
+    assert result["result"].unique_id == "aa:bb:cc:00:11:22"

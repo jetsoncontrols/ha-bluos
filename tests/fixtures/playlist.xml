@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <playlist shuffle="0" repeat="2" length="13" id="57">
   <song service="LocalMusic" id="0">
-    <art>Jack Johnson</art>
-    <alb>To the Sea</alb>
-    <title>Anything but the Truth</title>
+    <art>Riverbend</art>
+    <alb>Open Water</alb>
+    <title>First Light</title>
     <track>12</track>
     <discno>1</discno>
     <date>2010</date>
     <time>174</time>
-    <fn>/var/mnt/ultima-thule-Music/Jack Johnson/To the Sea (2010)/Jack Johnson - To the Sea - 12 - Anything but the Truth.flac</fn>
+    <fn>/var/mnt/nas-media/Riverbend/Open Water (2010)/Riverbend - Open Water - 12 - First Light.flac</fn>
     <quality>hd</quality>
-    <image>/Artwork?service=LocalMusic&amp;artist=Jack+Johnson&amp;album=To+the+Sea</image>
+    <image>/Artwork?service=LocalMusic&amp;artist=Riverbend&amp;album=Open+Water</image>
   </song>
   <song service="LocalMusic" id="1">
-    <art>Jack Johnson</art>
-    <alb>To the Sea</alb>
-    <title>At or With Me</title>
+    <art>Riverbend</art>
+    <alb>Open Water</alb>
+    <title>Second Wind</title>
     <track>4</track>
     <discno>1</discno>
     <date>2010</date>
     <time>238</time>
-    <fn>/var/mnt/ultima-thule-Music/Jack Johnson/To the Sea (2010)/Jack Johnson - To the Sea - 04 - At or With Me.flac</fn>
+    <fn>/var/mnt/nas-media/Riverbend/Open Water (2010)/Riverbend - Open Water - 04 - Second Wind.flac</fn>
     <quality>hd</quality>
-    <image>/Artwork?service=LocalMusic&amp;artist=Jack+Johnson&amp;album=To+the+Sea</image>
+    <image>/Artwork?service=LocalMusic&amp;artist=Riverbend&amp;album=Open+Water</image>
   </song>
   <song service="LocalMusic" id="2">
-    <art>Jack Johnson</art>
-    <alb>To the Sea</alb>
-    <title>From the Clouds</title>
+    <art>Riverbend</art>
+    <alb>Open Water</alb>
+    <title>Third Time</title>
     <track>6</track>
     <discno>1</discno>
     <date>2010</date>
     <time>186</time>
-    <fn>/var/mnt/ultima-thule-Music/Jack Johnson/To the Sea (2010)/Jack Johnson - To the Sea - 06 - From the Clouds.flac</fn>
+    <fn>/var/mnt/nas-media/Riverbend/Open Water (2010)/Riverbend - Open Water - 06 - Third Time.flac</fn>
     <quality>hd</quality>
-    <image>/Artwork?service=LocalMusic&amp;artist=Jack+Johnson&amp;album=To+the+Sea</image>
+    <image>/Artwork?service=LocalMusic&amp;artist=Riverbend&amp;album=Open+Water</image>
   </song>
 </playlist>

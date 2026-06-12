@@ -21,16 +21,16 @@ def test_parse_real_ci580_packet():
     announces = parse_packet(PACKET)
     # The CI580 splits its four nodes across two Announce messages.
     assert len(announces) == 2
-    assert all(a.host == "192.168.1.60" for a in announces)
-    assert all(a.node_id == "9056820a237c" for a in announces)
+    assert all(a.host == "192.0.2.10" for a in announces)
+    assert all(a.node_id == "aabbcc001122" for a in announces)
 
 
 def test_units_merge_and_filter():
     units = units_from_announces(parse_packet(PACKET))
     assert len(units) == 1
     unit = units[0]
-    assert unit.host == "192.168.1.60"
-    assert unit.node_id == "9056820a237c"
+    assert unit.host == "192.0.2.10"
+    assert unit.node_id == "aabbcc001122"
     # Player classes only (the 0x0004 mgmt record on port 11431 is excluded).
     assert [n.port for n in unit.nodes] == [11000, 11010, 11020, 11030]
     assert [n.cls for n in unit.nodes] == [0x0001, 0x0003, 0x0003, 0x0003]

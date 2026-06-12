@@ -14,15 +14,15 @@ from custom_components.bluos.media_player import chassis_identifier
 
 from .helpers import FakeClient
 
-BASE_MAC = "90:56:82:0a:23:7c"
+BASE_MAC = "aa:bb:cc:00:11:22"
 ENTRY_DATA = {
-    CONF_HOST: "192.168.1.60",
+    CONF_HOST: "192.0.2.10",
     CONF_MAC: BASE_MAC,
     CONF_NODES: [
-        {"port": 11000, "mac": "90:56:82:0A:23:7C", "name": "BluOS Zone 1"},
-        {"port": 11010, "mac": "90:56:82:0A:23:7C:11010", "name": "BluOS Zone 2"},
-        {"port": 11020, "mac": "90:56:82:0A:23:7C:11020", "name": "Kitchen Speakers"},
-        {"port": 11030, "mac": "90:56:82:0A:23:7C:11030", "name": "CI580-237C-4"},
+        {"port": 11000, "mac": "AA:BB:CC:00:11:22", "name": "BluOS Zone 1"},
+        {"port": 11010, "mac": "AA:BB:CC:00:11:22:11010", "name": "BluOS Zone 2"},
+        {"port": 11020, "mac": "AA:BB:CC:00:11:22:11020", "name": "Kitchen Speakers"},
+        {"port": 11030, "mac": "AA:BB:CC:00:11:22:11030", "name": "CI580-1122-4"},
     ],
 }
 
@@ -55,7 +55,7 @@ async def test_volume_features_only_on_variable_zone(hass: HomeAssistant):
     ent_reg = er.async_get(hass)
 
     kitchen = ent_reg.async_get_entity_id(
-        "media_player", DOMAIN, "90:56:82:0a:23:7c:11020"
+        "media_player", DOMAIN, "aa:bb:cc:00:11:22:11020"
     )
     zone1 = ent_reg.async_get_entity_id("media_player", DOMAIN, BASE_MAC)
 
@@ -73,12 +73,12 @@ async def test_now_playing_metadata(hass: HomeAssistant):
     ent_reg = er.async_get(hass)
     # Zone 2 fixture carries a loaded track.
     zone2 = ent_reg.async_get_entity_id(
-        "media_player", DOMAIN, "90:56:82:0a:23:7c:11010"
+        "media_player", DOMAIN, "aa:bb:cc:00:11:22:11010"
     )
     attrs = hass.states.get(zone2).attributes
-    assert attrs["media_title"] == "13 Beaches"
-    assert attrs["media_artist"] == "Lana Del Rey"
-    assert attrs["media_album_name"] == "Lust for Life"
+    assert attrs["media_title"] == "Coastline"
+    assert attrs["media_artist"] == "Aurora"
+    assert attrs["media_album_name"] == "Daydream"
 
 
 async def test_device_hierarchy_via_chassis(hass: HomeAssistant):
@@ -88,12 +88,12 @@ async def test_device_hierarchy_via_chassis(hass: HomeAssistant):
     chassis = dev_reg.async_get_device(identifiers={chassis_identifier(BASE_MAC)})
     assert chassis is not None
     assert chassis.name == "NAD CI580"
-    assert chassis.configuration_url == "http://192.168.1.60"
+    assert chassis.configuration_url == "http://192.0.2.10"
 
     zone1 = dev_reg.async_get_device(identifiers={(DOMAIN, BASE_MAC)})
     assert zone1 is not None
     assert zone1.via_device_id == chassis.id
-    assert zone1.configuration_url == "http://192.168.1.60"
+    assert zone1.configuration_url == "http://192.0.2.10"
 
 
 async def test_transport_command_calls_client(hass: HomeAssistant):
@@ -104,7 +104,7 @@ async def test_transport_command_calls_client(hass: HomeAssistant):
     await hass.services.async_call(
         "media_player", "media_play", {"entity_id": zone1}, blocking=True
     )
-    coordinator = hass.data[DOMAIN].coordinators_by_addr[("192.168.1.60", 11000)]
+    coordinator = hass.data[DOMAIN].coordinators_by_addr[("192.0.2.10", 11000)]
     assert ("play", ()) in coordinator.client.calls
 
 
@@ -113,7 +113,7 @@ async def test_join_calls_add_slave(hass: HomeAssistant):
     ent_reg = er.async_get(hass)
     zone1 = ent_reg.async_get_entity_id("media_player", DOMAIN, BASE_MAC)
     kitchen = ent_reg.async_get_entity_id(
-        "media_player", DOMAIN, "90:56:82:0a:23:7c:11020"
+        "media_player", DOMAIN, "aa:bb:cc:00:11:22:11020"
     )
     await hass.services.async_call(
         "media_player",
@@ -122,8 +122,8 @@ async def test_join_calls_add_slave(hass: HomeAssistant):
         blocking=True,
     )
     data = hass.data[DOMAIN]
-    primary = data.coordinators_by_addr[("192.168.1.60", 11000)]
-    assert ("add_slave", ("192.168.1.60", 11020)) in primary.client.calls
+    primary = data.coordinators_by_addr[("192.0.2.10", 11000)]
+    assert ("add_slave", ("192.0.2.10", 11020)) in primary.client.calls
 
 
 async def test_unjoin_uses_primary_slave_list_when_secondary_is_stale(
@@ -133,20 +133,20 @@ async def test_unjoin_uses_primary_slave_list_when_secondary_is_stale(
     await _setup(hass)
     ent_reg = er.async_get(hass)
     kitchen = ent_reg.async_get_entity_id(
-        "media_player", DOMAIN, "90:56:82:0a:23:7c:11020"
+        "media_player", DOMAIN, "aa:bb:cc:00:11:22:11020"
     )
     data = hass.data[DOMAIN]
-    primary = data.coordinators_by_addr[("192.168.1.60", 11000)]
-    secondary = data.coordinators_by_addr[("192.168.1.60", 11020)]
+    primary = data.coordinators_by_addr[("192.0.2.10", 11000)]
+    secondary = data.coordinators_by_addr[("192.0.2.10", 11020)]
 
     # Group exists from the primary's view; the secondary hasn't caught up.
-    primary.data.sync.slaves = [("192.168.1.60", 11020)]
+    primary.data.sync.slaves = [("192.0.2.10", 11020)]
     secondary.data.sync.master = None
 
     await hass.services.async_call(
         "media_player", "unjoin", {"entity_id": kitchen}, blocking=True
     )
-    assert ("remove_slave", ("192.168.1.60", 11020)) in primary.client.calls
+    assert ("remove_slave", ("192.0.2.10", 11020)) in primary.client.calls
 
 
 async def test_node_unavailable_when_uncontactable(hass: HomeAssistant):
@@ -158,7 +158,7 @@ async def test_node_unavailable_when_uncontactable(hass: HomeAssistant):
     await _setup(hass)
     ent_reg = er.async_get(hass)
     zone1 = ent_reg.async_get_entity_id("media_player", DOMAIN, BASE_MAC)
-    coordinator = hass.data[DOMAIN].coordinators_by_addr[("192.168.1.60", 11000)]
+    coordinator = hass.data[DOMAIN].coordinators_by_addr[("192.0.2.10", 11000)]
 
     assert hass.states.get(zone1).state != "unavailable"
 

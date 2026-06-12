@@ -47,6 +47,10 @@ pytest tests/ -q
 
 Tests run against recorded fixtures (real `/Status`, `/SyncStatus`, and an LSDP packet captured from a CI580) under `tests/fixtures/`, so no hardware is required.
 
-## License & trademarks
+## License
+
+Licensed under the **PolyForm Noncommercial License 1.0.0** — free to use, modify and share for any **noncommercial** purpose. Commercial use requires a separate license from the author. See [LICENSE](LICENSE).
+
+## Trademarks
 
 BluOS is a trademark of Lenbrook Industries Limited. This is an unofficial, community integration and is not affiliated with or endorsed by Lenbrook.

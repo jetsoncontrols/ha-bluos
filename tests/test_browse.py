@@ -23,7 +23,7 @@ from custom_components.bluos.const import DOMAIN
 from .helpers import load_fixture
 from .test_init import _setup
 
-KITCHEN_MAC = "90:56:82:0a:23:7c:11020"
+KITCHEN_MAC = "aa:bb:cc:00:11:22:11020"
 
 
 def _entity(hass: HomeAssistant, unique_id: str):
@@ -95,8 +95,8 @@ def test_synthesize_play_all_from_localmusic_filter():
         == "/Add?genre=Acoustic+Rock&service=LocalMusic&playnow=1"
     )
     assert (
-        synthesize_play_all("LocalMusic:MG/LocalMusic-Composer?composer=Dan+Reynolds")
-        == "/Add?composer=Dan+Reynolds&service=LocalMusic&playnow=1"
+        synthesize_play_all("LocalMusic:MG/LocalMusic-Composer?composer=Sample+Composer")
+        == "/Add?composer=Sample+Composer&service=LocalMusic&playnow=1"
     )
     # No filter / not LocalMusic / a plain list -> nothing to synthesize.
     assert synthesize_play_all("LocalMusic:GG/Genres") is None
@@ -239,7 +239,7 @@ async def test_browse_queue_lists_tracks(hass: HomeAssistant):
     queue = await entity.async_browse_media(media_content_id="queue")
     assert len(queue.children) == 3
     first = queue.children[0]
-    assert first.can_play and "Anything but the Truth" in first.title
+    assert first.can_play and "First Light" in first.title
     # selecting a queue track jumps to that position
     await _play_media(hass, entity, first.media_content_id)
     assert ("play_uri", ("/Play?id=0",)) in entity.coordinator.client.calls
