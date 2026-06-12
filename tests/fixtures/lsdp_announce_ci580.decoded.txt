@@ -1,0 +1,11 @@
+HEADER len=6 magic=LSDP version=1
+
+ANNOUNCE len=217 nodeId=90:56:82:0a:23:7c addr=192.168.1.60 records=3
+  class=0x0001 player           {'name': 'BluOS Zone 1', 'port': '11000', 'model': 'CI580v2', 'version': '4.16.6', 'zs': '0'}
+  class=0x0003 ci580-secondary  {'name': 'BluOS Zone 2', 'port': '11010', 'model': 'CI580v2', 'version': '4.16.6', 'zs': '0'}
+  class=0x0003 ci580-secondary  {'name': 'Kitchen Speakers', 'port': '11020', 'model': 'CI580v2', 'version': '4.16.6', 'zs': '0'}
+
+ANNOUNCE len=113 nodeId=90:56:82:0a:23:7c addr=192.168.1.60 records=2
+  class=0x0003 ci580-secondary  {'name': 'CI580-237C-4', 'port': '11030', 'model': 'CI580v2', 'version': '4.16.6', 'zs': '0'}
+  class=0x0004 sovi-mfg         {'name': 'BluOS Zone 1', 'port': '11431'}
+

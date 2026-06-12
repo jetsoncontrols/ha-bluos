@@ -1,0 +1,29 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "user": {
+        "title": "Add BluOS device",
+        "description": "Enter the IP address of a BluOS player. Multi-zone units (such as the NAD CI580) are added with all of their zones.",
+        "data": {
+          "host": "Host"
+        },
+        "data_description": {
+          "host": "The IP address or hostname of the BluOS player."
+        }
+      },
+      "discovery_confirm": {
+        "title": "Add BluOS device",
+        "description": "Do you want to add {name}?"
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect"
+    },
+    "abort": {
+      "already_configured": "This BluOS unit is already configured",
+      "already_in_progress": "Configuration flow is already in progress",
+      "cannot_connect": "Failed to connect"
+    }
+  }
+}
