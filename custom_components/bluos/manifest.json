@@ -3,13 +3,13 @@
   "name": "BluOS",
   "codeowners": ["@sshanafelt"],
   "config_flow": true,
-  "dependencies": [],
+  "dependencies": ["media_source"],
   "documentation": "https://github.com/jetsoncontrols/ha-bluos",
   "integration_type": "hub",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/jetsoncontrols/ha-bluos/issues",
   "loggers": ["custom_components.bluos"],
   "requirements": [],
-  "version": "0.1.0",
+  "version": "0.2.0",
   "zeroconf": ["_musc._tcp.local.", "_musp._tcp.local."]
 }

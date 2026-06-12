@@ -11,9 +11,10 @@ It exposes one `media_player` entity per player **node**. Most BluOS products ar
 - **Transport controls:** play, pause, stop, next, previous, shuffle, repeat.
 - **Volume & mute** — advertised only on nodes with an adjustable level. Fixed line-level outputs (which BluOS reports as `volume = -1`) correctly omit volume controls.
 - **Speaker grouping** — join/unjoin players from the Home Assistant media UI, including across separate BluOS units.
+- **Sources** — pick physical inputs (Analog, Optical, …) and saved presets from the Source dropdown.
+- **Media browse, search & play** — browse the full BluOS content tree (services, radio, playlists, your library and the Home Assistant media library), search within a service, and play items (with play-now / play-next / add-to-queue via `enqueue`). TTS/announcements work via `play_media`.
+- **Services** — `bluos.add_to_queue` (now/next/last) and `bluos.add_favourite` for browsed items.
 - **Local push** — state updates arrive over BluOS long-polling, so changes show up near-instantly without aggressive polling.
-
-Media browsing is **not** included in this initial release.
 
 ## Installation
 

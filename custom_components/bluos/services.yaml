@@ -1,0 +1,32 @@
+add_to_queue:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+  fields:
+    media_content_id:
+      required: true
+      example: "item:eyJiIjoiLi4uIn0="
+      selector:
+        text:
+    mode:
+      required: true
+      default: "next"
+      selector:
+        select:
+          options:
+            - "now"
+            - "next"
+            - "last"
+
+add_favourite:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+  fields:
+    media_content_id:
+      required: true
+      example: "item:eyJiIjoiLi4uIn0="
+      selector:
+        text:

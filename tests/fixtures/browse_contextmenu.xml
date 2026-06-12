@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<browse serviceIcon="/Sources/images/RadioParadiseIcon.png" serviceName="Radio Paradise" type="contextMenu">
+  <item actionURL="/SetPreset?image=https%3A%2F%2Fimg.radioparadise.com%2Fchannels%2F0%2F0%2Fcover_512x512%2F0.jpg&amp;name=The+Main+Mix&amp;service=RadioParadise&amp;url=RadioParadise%3A%2F0%3A20" text="Add preset" type="preset"></item>
+</browse>

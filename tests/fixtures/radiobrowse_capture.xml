@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<radiotime service="Capture">
+  <item text="Analog Input" id="input0" type="audio" inputType="analog" URL="Capture%3Aplughw%3Aimxnadadc%2C0%2F48000%2F24%2F2%3Fid%3Dinput0" image="/images/capture/ic_analoginput.png" typeIndex="analog-1"></item>
+  <item text="Optical Input" id="input1" type="audio" inputType="spdif" URL="Capture%3Ahw%3Aimxspdif%2C0%2F1%2F25%2F2%3Fid%3Dinput1" image="/images/capture/ic_opticalinput.png" typeIndex="spdif-1"></item>
+</radiotime>

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from xml.etree import ElementTree as ET
 
 import aiohttp
+from yarl import URL
 
 from .const import (
     CONNECT_TIMEOUT,
@@ -63,6 +64,7 @@ class PlayerStatus:
     can_seek: bool = False
     is_stream: bool = False  # <streamUrl> present -> not playing from the queue
     sync_stat: str | None = None  # mirrors SyncStatus syncStat; flags grouping changes
+    prid: str | None = None  # preset revision; changes when presets are edited
 
     @classmethod
     def from_xml(cls, text: str) -> PlayerStatus:
@@ -90,6 +92,7 @@ class PlayerStatus:
             can_seek=root.findtext("canSeek") == "1",
             is_stream=root.find("streamUrl") is not None,
             sync_stat=root.findtext("syncStat"),
+            prid=root.findtext("prid"),
         )
 
     @property
@@ -165,6 +168,144 @@ class NodeInfo:
     name: str | None = None
     model_name: str | None = None
     brand: str | None = None
+
+
+@dataclass(slots=True)
+class Preset:
+    """A saved player preset (`/Presets`)."""
+
+    id: int
+    name: str
+    url: str | None = None
+    image: str | None = None
+
+    @classmethod
+    def list_from_xml(cls, text: str) -> list[Preset]:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid /Presets XML: {err}") from err
+        return [
+            cls(
+                id=_int(p.get("id")),
+                name=p.get("name", ""),
+                url=p.get("url"),
+                image=p.get("image") or None,
+            )
+            for p in root.findall("preset")
+        ]
+
+
+@dataclass(slots=True)
+class InputSource:
+    """A physical input (`/RadioBrowse?service=Capture`)."""
+
+    id: str
+    name: str
+    input_type: str | None = None  # analog, spdif, ...
+    type_index: str | None = None  # e.g. "analog-1" for /Play?inputTypeIndex=
+    url: str | None = None  # Capture URL (fallback play target)
+    image: str | None = None
+
+    @classmethod
+    def list_from_xml(cls, text: str) -> list[InputSource]:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid Capture XML: {err}") from err
+        return [
+            cls(
+                id=item.get("id", ""),
+                name=item.get("text", ""),
+                input_type=item.get("inputType"),
+                type_index=item.get("typeIndex"),
+                url=item.get("URL"),
+                image=item.get("image") or None,
+            )
+            for item in root.findall("item")
+        ]
+
+
+@dataclass(slots=True)
+class BrowseItem:
+    """A single node in a `/Browse` result.
+
+    Attribute values come back XML-unescaped from ElementTree, so `browse_key`,
+    `context_menu_key` and `search_key` are ready to be passed straight to a
+    follow-up request as a `key` parameter (which percent-encodes once). The
+    URL attributes (`play_url`/`autoplay_url`/`action_url`) are already in
+    final-encoded form and must be GET verbatim (see `BluOsClient.play_uri`).
+    """
+
+    type: str = ""
+    text: str | None = None
+    text2: str | None = None
+    image: str | None = None
+    browse_key: str | None = None
+    play_url: str | None = None
+    autoplay_url: str | None = None
+    context_menu_key: str | None = None
+    action_url: str | None = None  # context-menu action items
+    input_type: str | None = None
+
+    @classmethod
+    def from_element(cls, el: ET.Element) -> BrowseItem:
+        return cls(
+            type=el.get("type", ""),
+            text=el.get("text"),
+            text2=el.get("text2"),
+            image=el.get("image") or None,
+            browse_key=el.get("browseKey"),
+            play_url=el.get("playURL"),
+            autoplay_url=el.get("autoplayURL"),
+            context_menu_key=el.get("contextMenuKey"),
+            action_url=el.get("actionURL"),
+            input_type=el.get("inputType"),
+        )
+
+    @property
+    def can_expand(self) -> bool:
+        return self.browse_key is not None
+
+    @property
+    def can_play(self) -> bool:
+        return self.play_url is not None or self.autoplay_url is not None
+
+
+@dataclass(slots=True)
+class BrowseResult:
+    """A parsed `/Browse` response (one level of the hierarchy)."""
+
+    type: str | None = None  # menu, items, playlists, contextMenu, ...
+    service_name: str | None = None
+    service_icon: str | None = None
+    search_key: str | None = None
+    next_key: str | None = None
+    items: list[BrowseItem] = field(default_factory=list)
+
+    @classmethod
+    def from_xml(cls, text: str) -> BrowseResult:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid /Browse XML: {err}") from err
+        if root.tag == "error":
+            message = root.findtext("message") or "browse error"
+            raise BluOsConnectionError(f"Browse error: {message}")
+
+        # Items can sit directly under <browse> or be grouped in <category>.
+        items = [BrowseItem.from_element(el) for el in root.findall("item")]
+        for category in root.findall("category"):
+            items.extend(BrowseItem.from_element(el) for el in category.findall("item"))
+
+        return cls(
+            type=root.get("type"),
+            service_name=root.get("serviceName"),
+            service_icon=root.get("serviceIcon"),
+            search_key=root.get("searchKey"),
+            next_key=root.get("nextKey"),
+            items=items,
+        )
 
 
 class BluOsClient:
@@ -268,6 +409,62 @@ class BluOsClient:
 
     async def remove_slave(self, slave_host: str, slave_port: int) -> None:
         await self._get("RemoveSlave", {"slave": slave_host, "port": slave_port})
+
+    # --- sources: presets, inputs ---------------------------------------
+    async def presets(self) -> list[Preset]:
+        return Preset.list_from_xml(await self._get("Presets"))
+
+    async def load_preset(self, preset_id: int) -> None:
+        await self._get("Preset", {"id": preset_id})
+
+    async def inputs(self) -> list[InputSource]:
+        return InputSource.list_from_xml(
+            await self._get("RadioBrowse", {"service": "Capture"})
+        )
+
+    async def select_input(self, type_index: str) -> None:
+        await self._get("Play", {"inputTypeIndex": type_index})
+
+    # --- browse / search -------------------------------------------------
+    async def browse(
+        self, key: str | None = None, q: str | None = None
+    ) -> BrowseResult:
+        """Browse (or search) the content tree.
+
+        `key` is an XML-unescaped browseKey/searchKey/contextMenuKey value; it is
+        passed as a parameter so it is percent-encoded exactly once.
+        """
+        params: dict[str, object] = {}
+        if key is not None:
+            params["key"] = key
+        if q is not None:
+            params["q"] = q
+        return BrowseResult.from_xml(
+            await self._get("Browse", params or None, timeout=15)
+        )
+
+    async def context_menu(self, key: str) -> BrowseResult:
+        """Fetch a browse item's context menu (a `<browse type="contextMenu">`)."""
+        return await self.browse(key=key)
+
+    async def play_uri(self, uri: str) -> None:
+        """GET a ready-made play/action URI verbatim.
+
+        `uri` is a relative path (e.g. `/Play?url=...`, an autoplayURL or a
+        context-menu actionURL) already in final-encoded form, so it must not be
+        re-encoded — yarl's `encoded=True` preserves it as-is.
+        """
+        path = uri if uri.startswith("/") else f"/{uri}"
+        full = URL(f"{self.base_url}{path}", encoded=True)
+        try:
+            async with self._session.get(
+                full,
+                timeout=aiohttp.ClientTimeout(total=15, sock_connect=CONNECT_TIMEOUT),
+            ) as resp:
+                resp.raise_for_status()
+                await resp.read()
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise BluOsConnectionError(f"{full} failed: {err}") from err
 
 
 async def async_get_node(

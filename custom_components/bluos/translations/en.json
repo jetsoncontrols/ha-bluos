@@ -25,5 +25,31 @@
       "already_in_progress": "Configuration flow is already in progress",
       "cannot_connect": "Failed to connect"
     }
+  },
+  "services": {
+    "add_to_queue": {
+      "name": "Add to queue",
+      "description": "Add a browsed BluOS item to the play queue.",
+      "fields": {
+        "media_content_id": {
+          "name": "Media content ID",
+          "description": "The content ID of a BluOS browse item (from media browse)."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Where to add it: play now, play next, or add to the end."
+        }
+      }
+    },
+    "add_favourite": {
+      "name": "Add favourite",
+      "description": "Mark a browsed BluOS item as a favourite in its music service.",
+      "fields": {
+        "media_content_id": {
+          "name": "Media content ID",
+          "description": "The content ID of a BluOS browse item (from media browse)."
+        }
+      }
+    }
   }
 }

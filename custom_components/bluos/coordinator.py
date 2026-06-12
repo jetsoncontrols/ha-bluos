@@ -17,7 +17,14 @@ from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .api import BluOsClient, BluOsConnectionError, PlayerStatus, SyncStatus
+from .api import (
+    BluOsClient,
+    BluOsConnectionError,
+    InputSource,
+    PlayerStatus,
+    Preset,
+    SyncStatus,
+)
 from .const import (
     DOMAIN,
     ERROR_BACKOFF,
@@ -82,8 +89,12 @@ class BluOsCoordinator(DataUpdateCoordinator[BluOsData]):
         self.host = client.host
         self.port = client.port
         self.status_updated_at: datetime = dt_util.utcnow()
+        # Source caches feeding source_list (fetched out-of-band from /Status).
+        self.inputs: list[InputSource] = []
+        self.presets: list[Preset] = []
         self._status: PlayerStatus | None = None
         self._sync: SyncStatus | None = None
+        self._prid: str | None = None
         self._status_failures = 0
         self._sync_failures = 0
         self._last_status_req = 0.0
@@ -95,7 +106,28 @@ class BluOsCoordinator(DataUpdateCoordinator[BluOsData]):
             self.client.status(), self.client.sync_status()
         )
         self.status_updated_at = dt_util.utcnow()
+        self._prid = self._status.prid
+        await self._refresh_inputs()
+        await self._refresh_presets()
         return BluOsData(self._status, self._sync)
+
+    async def _refresh_inputs(self) -> None:
+        """Fetch the (rarely changing) physical input list; best-effort."""
+        try:
+            self.inputs = await self.client.inputs()
+        except BluOsConnectionError as err:
+            LOGGER.debug("%s inputs fetch failed: %s", self.name, err)
+
+    async def _refresh_presets(self) -> None:
+        """Fetch the preset list; best-effort."""
+        try:
+            self.presets = await self.client.presets()
+        except BluOsConnectionError as err:
+            LOGGER.debug("%s presets fetch failed: %s", self.name, err)
+
+    async def _refresh_presets_and_push(self) -> None:
+        await self._refresh_presets()
+        self._push()
 
     @callback
     def async_start_loops(self) -> None:
@@ -143,6 +175,10 @@ class BluOsCoordinator(DataUpdateCoordinator[BluOsData]):
                 and status.sync_stat != self._sync.sync_stat
             ):
                 self.hass.async_create_task(self._refresh_sync_once())
+            # A changed prid signals the preset list was edited -> refresh it.
+            if status.prid != self._prid:
+                self._prid = status.prid
+                self.hass.async_create_task(self._refresh_presets_and_push())
 
     async def _sync_loop(self) -> None:
         while True:

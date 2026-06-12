@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from custom_components.bluos.api import PlayerStatus, SyncStatus
+from custom_components.bluos.api import (
+    BrowseResult,
+    InputSource,
+    PlayerStatus,
+    Preset,
+    SyncStatus,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 ZONE_PORTS = [11000, 11010, 11020, 11030]
@@ -75,3 +81,33 @@ class FakeClient:
 
     async def remove_slave(self, host, port):
         await self._record("remove_slave", host, port)
+
+    # --- sources / browse (fixture-backed) ------------------------------
+    async def inputs(self):
+        return InputSource.list_from_xml(load_fixture("radiobrowse_capture.xml"))
+
+    async def presets(self):
+        return Preset.list_from_xml(load_fixture("presets.xml"))
+
+    async def load_preset(self, preset_id):
+        await self._record("load_preset", preset_id)
+
+    async def select_input(self, type_index):
+        await self._record("select_input", type_index)
+
+    async def browse(self, key=None, q=None):
+        await self._record("browse", key, q)
+        if q is not None:
+            return BrowseResult.from_xml(load_fixture("browse_radioparadise.xml"))
+        if key is None:
+            return BrowseResult.from_xml(load_fixture("browse_root.xml"))
+        if key == "RadioParadise:":
+            return BrowseResult.from_xml(load_fixture("browse_radioparadise.xml"))
+        return BrowseResult(type="items", items=[])
+
+    async def context_menu(self, key):
+        await self._record("context_menu", key)
+        return BrowseResult.from_xml(load_fixture("browse_contextmenu_rich.xml"))
+
+    async def play_uri(self, uri):
+        await self._record("play_uri", uri)

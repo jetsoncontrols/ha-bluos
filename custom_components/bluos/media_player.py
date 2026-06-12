@@ -2,22 +2,47 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
+from urllib.parse import quote
+
+from homeassistant.components import media_source
 from homeassistant.components.media_player import (
+    BrowseError,
+    BrowseMedia,
     MediaPlayerDeviceClass,
+    MediaPlayerEnqueue,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
     MediaType,
     RepeatMode,
+    SearchMedia,
+    SearchMediaQuery,
+    async_process_play_media_url,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import (
+    config_validation as cv,
+    entity_platform,
+    entity_registry as er,
+)
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+import voluptuous as vol
 
+from . import browse
 from .const import DOMAIN, VOLUME_STEP_DB
 from .coordinator import BluOsConfigEntry, BluOsCoordinator, BluOsRuntimeData
+
+# Context-menu queue modes -> BluOS action types (pick_context_action handles
+# the add-/addAll- family fallback).
+QUEUE_MODE_TYPES: dict[str, tuple[str, ...]] = {
+    "now": ("add-now",),
+    "next": ("add-next",),
+    "last": ("add-last",),
+}
 
 MP_DOMAIN = "media_player"
 
@@ -49,6 +74,11 @@ BASE_FEATURES = (
     | MediaPlayerEntityFeature.SHUFFLE_SET
     | MediaPlayerEntityFeature.REPEAT_SET
     | MediaPlayerEntityFeature.GROUPING
+    | MediaPlayerEntityFeature.SELECT_SOURCE
+    | MediaPlayerEntityFeature.BROWSE_MEDIA
+    | MediaPlayerEntityFeature.PLAY_MEDIA
+    | MediaPlayerEntityFeature.MEDIA_ENQUEUE
+    | MediaPlayerEntityFeature.SEARCH_MEDIA
 )
 VOLUME_FEATURES = (
     MediaPlayerEntityFeature.VOLUME_SET
@@ -62,12 +92,34 @@ def chassis_identifier(base_mac: str) -> tuple[str, str]:
     return (DOMAIN, f"unit-{base_mac}")
 
 
+def _audio_only(item: BrowseMedia) -> bool:
+    """media_source content filter: keep audio playables (folders are kept)."""
+    return bool(item.media_content_type) and item.media_content_type.startswith(
+        "audio/"
+    )
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: BluOsConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up one media_player per player node on the unit."""
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "add_to_queue",
+        {
+            vol.Required("media_content_id"): cv.string,
+            vol.Required("mode"): vol.In(list(QUEUE_MODE_TYPES)),
+        },
+        "async_add_to_queue",
+    )
+    platform.async_register_entity_service(
+        "add_favourite",
+        {vol.Required("media_content_id"): cv.string},
+        "async_add_favourite",
+    )
+
     unit = entry.runtime_data
     async_add_entities(
         BluOsMediaPlayer(coordinator, unit) for coordinator in unit.coordinators
@@ -177,6 +229,180 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
     @property
     def group_members(self) -> list[str]:
         return self._compute_group_members()
+
+    # --- sources (inputs + presets) -------------------------------------
+    @property
+    def source_list(self) -> list[str] | None:
+        names = [i.name for i in self.coordinator.inputs]
+        names += [p.name for p in self.coordinator.presets]
+        return names or None
+
+    @property
+    def source(self) -> str | None:
+        # Best-effort: only physical inputs are identifiable from /Status.
+        status = self._status
+        if status.service and status.service.lower() == "capture":
+            for inp in self.coordinator.inputs:
+                if inp.name == status.title1:
+                    return inp.name
+        return None
+
+    async def async_select_source(self, source: str) -> None:
+        for inp in self.coordinator.inputs:
+            if inp.name == source:
+                if inp.type_index:
+                    await self.coordinator.client.select_input(inp.type_index)
+                elif inp.url:
+                    await self.coordinator.client.play_uri(f"/Play?url={inp.url}")
+                return
+        for preset in self.coordinator.presets:
+            if preset.name == source:
+                await self.coordinator.client.load_preset(preset.id)
+                return
+
+    # --- media browse / play --------------------------------------------
+    async def async_browse_media(
+        self,
+        media_content_type: str | None = None,
+        media_content_id: str | None = None,
+    ) -> BrowseMedia:
+        client = self.coordinator.client
+        cid = media_content_id
+
+        if cid and media_source.is_media_source_id(cid):
+            return await media_source.async_browse_media(
+                self.hass, cid, content_filter=_audio_only
+            )
+
+        if cid in (None, browse.ROOT):
+            result = await client.browse()
+            node = browse.root_node(
+                result, self.coordinator.presets, client.host, client.port
+            )
+            # media_source may have nothing browsable; that's fine.
+            with suppress(BrowseError):
+                node.children.append(await self._media_library_root())
+            return node
+
+        if cid == browse.PRESETS:
+            return browse.presets_folder(
+                self.coordinator.presets, client.host, client.port
+            )
+
+        if cid.startswith(browse.ITEM_PREFIX):
+            key = browse.decode_item(cid).get("b")
+            if not key:
+                raise BrowseError(f"Item {cid} is not browsable")
+            result = await client.browse(key=key)
+            return browse.level_node(cid, result, client.host, client.port)
+
+        raise BrowseError(f"Unknown media content id: {cid}")
+
+    async def _media_library_root(self) -> BrowseMedia:
+        """The Home Assistant media-source library, for TTS/local media."""
+        return await media_source.async_browse_media(
+            self.hass, None, content_filter=_audio_only
+        )
+
+    async def async_play_media(self, media_type: str, media_id: str, **kwargs) -> None:
+        client = self.coordinator.client
+        enqueue: MediaPlayerEnqueue | None = kwargs.get("enqueue")
+        cid = media_id
+
+        if media_source.is_media_source_id(cid):
+            resolved = await media_source.async_resolve_media(
+                self.hass, cid, self.entity_id
+            )
+            url = async_process_play_media_url(self.hass, resolved.url)
+            await client.play_uri(f"/Play?url={quote(url, safe='')}")
+            return
+
+        if cid.startswith(browse.PRESET_PREFIX):
+            await client.load_preset(int(cid[len(browse.PRESET_PREFIX) :]))
+            return
+
+        if cid.startswith(browse.INPUT_PREFIX):
+            await client.select_input(cid[len(browse.INPUT_PREFIX) :])
+            return
+
+        if cid.startswith(browse.ITEM_PREFIX):
+            await self._play_item(browse.decode_item(cid), enqueue)
+            return
+
+        if cid.startswith(("http://", "https://")):
+            await client.play_uri(f"/Play?url={quote(cid, safe='')}")
+            return
+
+        raise ValueError(f"Unsupported media content id: {cid}")
+
+    async def _play_item(
+        self, payload: dict[str, str], enqueue: MediaPlayerEnqueue | None
+    ) -> None:
+        client = self.coordinator.client
+        play_url = payload.get("p")
+        autoplay_url = payload.get("a")
+        context_key = payload.get("c")
+        add_modes = (MediaPlayerEnqueue.ADD, MediaPlayerEnqueue.NEXT)
+
+        if enqueue in add_modes:
+            wanted = (
+                ("add-last", "addAll-last")
+                if enqueue is MediaPlayerEnqueue.ADD
+                else ("add-next", "addAll-next")
+            )
+            if context_key:
+                menu = await client.context_menu(context_key)
+                action = browse.pick_context_action(menu, *wanted)
+                if action:
+                    await client.play_uri(action)
+                    return
+            if autoplay_url:  # fallback: add + autofill
+                await client.play_uri(autoplay_url)
+                return
+
+        # Play now (REPLACE / PLAY / default): playURL clears the queue and plays.
+        target = play_url or autoplay_url
+        if target:
+            await client.play_uri(target)
+
+    # --- search ----------------------------------------------------------
+    async def async_search_media(self, query: SearchMediaQuery) -> SearchMedia:
+        client = self.coordinator.client
+        search_key: str | None = None
+        cid = query.media_content_id
+        if cid and cid.startswith(browse.ITEM_PREFIX):
+            browse_key = browse.decode_item(cid).get("b")
+            if browse_key:
+                context = await client.browse(key=browse_key)
+                search_key = context.search_key
+        result = await client.browse(key=search_key, q=query.search_query)
+        node = browse.search_node(query.search_query, result, client.host, client.port)
+        return SearchMedia(result=node.children)
+
+    # --- context-menu services (queue / favourite) ----------------------
+    async def async_add_to_queue(self, media_content_id: str, mode: str) -> None:
+        await self._invoke_context_action(
+            media_content_id, *QUEUE_MODE_TYPES[mode], what=f"queue ({mode})"
+        )
+
+    async def async_add_favourite(self, media_content_id: str) -> None:
+        await self._invoke_context_action(
+            media_content_id, "favourite-add", what="favourite"
+        )
+
+    async def _invoke_context_action(
+        self, media_content_id: str, *wanted: str, what: str
+    ) -> None:
+        if not media_content_id.startswith(browse.ITEM_PREFIX):
+            raise HomeAssistantError(f"{media_content_id} is not a browse item")
+        context_key = browse.decode_item(media_content_id).get("c")
+        if not context_key:
+            raise HomeAssistantError("This item has no context-menu actions")
+        menu = await self.coordinator.client.context_menu(context_key)
+        action = browse.pick_context_action(menu, *wanted)
+        if not action:
+            raise HomeAssistantError(f"No {what} action available for this item")
+        await self.coordinator.client.play_uri(action)
 
     # --- transport commands ---------------------------------------------
     async def async_media_play(self) -> None:
