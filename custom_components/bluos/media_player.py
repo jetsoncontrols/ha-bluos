@@ -360,10 +360,20 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
                 await client.play_uri(autoplay_url)
                 return
 
-        # Play now (REPLACE / PLAY / default): playURL clears the queue and plays.
-        target = play_url or autoplay_url
-        if target:
-            await client.play_uri(target)
+        # Play now (REPLACE / PLAY / default).
+        if play_url:
+            await client.play_uri(play_url)  # clears the queue and plays
+            return
+        if autoplay_url:
+            await client.play_uri(autoplay_url)
+            return
+        # "Play all" containers (e.g. local-library artists) expose this only via
+        # their context menu.
+        if context_key:
+            menu = await client.context_menu(context_key)
+            action = browse.pick_play_action(menu)
+            if action:
+                await client.play_uri(action)
 
     # --- search ----------------------------------------------------------
     async def async_search_media(self, query: SearchMediaQuery) -> SearchMedia:
@@ -381,25 +391,29 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
 
     # --- context-menu services (queue / favourite) ----------------------
     async def async_add_to_queue(self, media_content_id: str, mode: str) -> None:
-        await self._invoke_context_action(
-            media_content_id, *QUEUE_MODE_TYPES[mode], what=f"queue ({mode})"
+        menu = await self._resolve_context_menu(media_content_id)
+        action = (
+            browse.pick_play_action(menu)
+            if mode == "now"
+            else browse.pick_context_action(menu, *QUEUE_MODE_TYPES[mode])
         )
+        await self._run_action(action, f"queue ({mode})")
 
     async def async_add_favourite(self, media_content_id: str) -> None:
-        await self._invoke_context_action(
-            media_content_id, "favourite-add", what="favourite"
+        menu = await self._resolve_context_menu(media_content_id)
+        await self._run_action(
+            browse.pick_context_action(menu, "favourite-add"), "favourite"
         )
 
-    async def _invoke_context_action(
-        self, media_content_id: str, *wanted: str, what: str
-    ) -> None:
+    async def _resolve_context_menu(self, media_content_id: str):
         if not media_content_id.startswith(browse.ITEM_PREFIX):
             raise HomeAssistantError(f"{media_content_id} is not a browse item")
         context_key = browse.decode_item(media_content_id).get("c")
         if not context_key:
             raise HomeAssistantError("This item has no context-menu actions")
-        menu = await self.coordinator.client.context_menu(context_key)
-        action = browse.pick_context_action(menu, *wanted)
+        return await self.coordinator.client.context_menu(context_key)
+
+    async def _run_action(self, action: str | None, what: str) -> None:
         if not action:
             raise HomeAssistantError(f"No {what} action available for this item")
         await self.coordinator.client.play_uri(action)

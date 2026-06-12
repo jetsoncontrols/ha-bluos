@@ -107,7 +107,12 @@ class FakeClient:
 
     async def context_menu(self, key):
         await self._record("context_menu", key)
-        return BrowseResult.from_xml(load_fixture("browse_contextmenu_rich.xml"))
+        name = (
+            "browse_contextmenu_artist.xml"
+            if "artist" in (key or "").lower()
+            else "browse_contextmenu_rich.xml"
+        )
+        return BrowseResult.from_xml(load_fixture(name))
 
     async def play_uri(self, uri):
         await self._record("play_uri", uri)

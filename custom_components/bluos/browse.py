@@ -16,6 +16,7 @@ from __future__ import annotations
 import base64
 import json
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from homeassistant.components.media_player import (
     BrowseMedia,
@@ -45,6 +46,12 @@ _TYPE_TO_CLASS: dict[str, MediaClass] = {
     "section": MediaClass.DIRECTORY,
     "menu": MediaClass.DIRECTORY,
 }
+
+# Container types that are "play all"-able via their context menu even when they
+# expose no direct playURL/autoplayURL (e.g. local-library artists/genres).
+_CONTEXT_PLAYABLE_TYPES = frozenset(
+    {"artist", "album", "playlist", "composer", "genre", "folder", "track", "audio"}
+)
 
 
 def media_url(host: str, port: int, path: str | None) -> str | None:
@@ -83,16 +90,24 @@ def _media_class(item: BrowseItem) -> MediaClass:
     return MediaClass.DIRECTORY if item.can_expand else MediaClass.MUSIC
 
 
+def _is_playable(item: BrowseItem) -> bool:
+    # A direct play URL, or a "play all"-able container with a context menu.
+    return item.can_play or (
+        item.context_menu_key is not None and item.type in _CONTEXT_PLAYABLE_TYPES
+    )
+
+
 def item_to_browse_media(item: BrowseItem, host: str, port: int) -> BrowseMedia | None:
     """Convert one BluOS browse item to a BrowseMedia node, or None to skip."""
-    if not (item.can_expand or item.can_play):
+    playable = _is_playable(item)
+    if not (item.can_expand or playable):
         return None  # plain text / non-actionable node
     return BrowseMedia(
         media_class=_media_class(item),
         media_content_id=encode_item(item),
         media_content_type=DIRECTORY if item.can_expand else MediaType.MUSIC,
         title=item.text or item.text2 or "",
-        can_play=item.can_play,
+        can_play=playable,
         can_expand=item.can_expand,
         thumbnail=media_url(host, port, item.image),
     )
@@ -205,6 +220,29 @@ def pick_context_action(result: BrowseResult, *wanted: str) -> str | None:
         for item_type, url in by_type.items():
             if item_type.endswith(f"-{suffix}"):
                 return url
+    return None
+
+
+def _action_params(action_url: str) -> dict[str, str]:
+    return {k: v[0] for k, v in parse_qs(urlsplit(action_url).query).items()}
+
+
+def pick_play_action(result: BrowseResult) -> str | None:
+    """Return the actionURL that plays the item *now* (clear + play, no shuffle).
+
+    BluOS overloads the context-menu ``type`` (e.g. both "Add all" and "Play all"
+    are ``addAll-last``), so the reliable signal is the actionURL's ``playnow``
+    parameter: ``playnow=1`` (and not ``shuffle=1``) means play now.
+    """
+    explicit = pick_context_action(result, "add-now", "addAll-now")
+    if explicit:
+        return explicit
+    for item in result.items:
+        if not item.action_url:
+            continue
+        params = _action_params(item.action_url)
+        if params.get("playnow") == "1" and params.get("shuffle", "0") != "1":
+            return item.action_url
     return None
 
 

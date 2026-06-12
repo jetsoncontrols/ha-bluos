@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<browse serviceIcon="/images/LibraryIcon.png" serviceName="Library" searchKey="LocalMusic:Search" type="contextMenu">
+  <item actionURL="/AddFavourite?artist=Aerosmith&amp;service=LocalMusic" text="Favourite" type="favourite-add"></item>
+  <item actionURL="/Add?artist=Aerosmith&amp;playnow=-1&amp;service=LocalMusic" text="Add all songs to queue" type="addAll-last"></item>
+  <item actionURL="/Add?artist=Aerosmith&amp;playnow=1&amp;service=LocalMusic&amp;shuffle=0" text="Play all" type="addAll-last"></item>
+  <item actionURL="/Add?artist=Aerosmith&amp;playnow=1&amp;service=LocalMusic&amp;shuffle=1" text="Shuffle" type="addAll-shuffle"></item>
+</browse>

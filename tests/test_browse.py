@@ -9,11 +9,13 @@ from homeassistant.components.media_player import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_component, entity_registry as er
 
-from custom_components.bluos.api import BrowseItem
+from custom_components.bluos.api import BrowseItem, BrowseResult
 from custom_components.bluos.browse import (
     decode_item,
     encode_item,
+    item_to_browse_media,
     pick_context_action,
+    pick_play_action,
 )
 from custom_components.bluos.const import DOMAIN
 
@@ -55,8 +57,6 @@ def test_content_id_codec_round_trip():
 
 
 def test_pick_context_action_family_fallback():
-    from custom_components.bluos.api import BrowseResult
-
     menu = BrowseResult.from_xml(load_fixture("browse_contextmenu_rich.xml"))
     # exact match
     assert pick_context_action(menu, "favourite-add").startswith("/AddFavourite?")
@@ -64,6 +64,28 @@ def test_pick_context_action_family_fallback():
     assert "where=nextAlbum" in pick_context_action(menu, "add-next")
     assert "where=last" in pick_context_action(menu, "add-last")
     assert pick_context_action(menu, "nonexistent") is None
+
+
+def test_pick_play_action_uses_playnow_param():
+    # Local-library artist: both "Add all" and "Play all" are type addAll-last;
+    # the play-now action is the one with playnow=1 (and not shuffle).
+    menu = BrowseResult.from_xml(load_fixture("browse_contextmenu_artist.xml"))
+    action = pick_play_action(menu)
+    assert "playnow=1" in action and "shuffle=0" in action
+
+
+def test_pick_play_action_prefers_explicit_add_now():
+    menu = BrowseResult.from_xml(load_fixture("browse_contextmenu_rich.xml"))
+    assert pick_play_action(menu).startswith("/Add?service=Deezer&playnow=1")
+
+
+def test_context_only_container_is_playable():
+    artist = BrowseItem(type="artist", browse_key="LM:a", context_menu_key="LM:CM/a")
+    node = item_to_browse_media(artist, "h", 11000)
+    assert node.can_play and node.can_expand  # "Play all" + drill-in
+    section = BrowseItem(type="section", browse_key="LM:s")
+    node2 = item_to_browse_media(section, "h", 11000)
+    assert node2.can_expand and not node2.can_play
 
 
 # --- source selection ----------------------------------------------------
@@ -156,6 +178,20 @@ async def test_play_item_enqueue_next_uses_context_action(hass: HomeAssistant):
     await _play_media(hass, entity, cid, enqueue=MediaPlayerEnqueue.NEXT)
     play_uris = [c for c in entity.coordinator.client.calls if c[0] == "play_uri"]
     assert play_uris and "where=nextAlbum" in play_uris[-1][1][0]
+
+
+async def test_play_all_container_via_context_menu(hass: HomeAssistant):
+    # An artist node has no playURL — "Play all" comes from its context menu.
+    entity = await _kitchen(hass)
+    cid = encode_item(
+        BrowseItem(
+            type="artist", browse_key="LM:a", context_menu_key="LocalMusic:CM/artist"
+        )
+    )
+    await _play_media(hass, entity, cid)
+    play_uris = [c for c in entity.coordinator.client.calls if c[0] == "play_uri"]
+    assert play_uris
+    assert "playnow=1" in play_uris[-1][1][0] and "shuffle=0" in play_uris[-1][1][0]
 
 
 # --- search --------------------------------------------------------------
