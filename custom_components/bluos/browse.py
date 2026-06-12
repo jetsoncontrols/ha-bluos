@@ -24,10 +24,11 @@ from homeassistant.components.media_player import (
     MediaType,
 )
 
-from .api import BrowseItem, BrowseResult, Preset
+from .api import BrowseItem, BrowseResult, Playlist, Preset
 
 ROOT = "root"
 PRESETS = "presets"
+QUEUE = "queue"
 ITEM_PREFIX = "item:"
 PRESET_PREFIX = "preset:"
 INPUT_PREFIX = "input:"
@@ -185,10 +186,51 @@ def _children_from_result(
     return children
 
 
+def queue_folder() -> BrowseMedia:
+    """A static "Play queue" entry for the root (contents fetched on expand)."""
+    return BrowseMedia(
+        media_class=MediaClass.DIRECTORY,
+        media_content_id=QUEUE,
+        media_content_type=DIRECTORY,
+        title="Play queue",
+        can_play=False,
+        can_expand=True,
+        children_media_class=MediaClass.TRACK,
+    )
+
+
+def queue_node(playlist: Playlist, host: str, port: int) -> BrowseMedia:
+    """The current play queue; selecting a track jumps to it (`/Play?id=`)."""
+    children: list[BrowseMedia] = []
+    for track in playlist.tracks:
+        title = track.title or "Unknown"
+        if track.artist:
+            title = f"{title} — {track.artist}"
+        item = BrowseItem(
+            type="track",
+            text=title,
+            play_url=f"/Play?id={track.id}",
+            image=track.image,
+        )
+        node = item_to_browse_media(item, host, port)
+        if node is not None:
+            children.append(node)
+    return BrowseMedia(
+        media_class=MediaClass.DIRECTORY,
+        media_content_id=QUEUE,
+        media_content_type=DIRECTORY,
+        title="Play queue",
+        can_play=False,
+        can_expand=True,
+        children_media_class=MediaClass.TRACK,
+        children=children,
+    )
+
+
 def root_node(
     result: BrowseResult, presets: list[Preset], host: str, port: int
 ) -> BrowseMedia:
-    children: list[BrowseMedia] = []
+    children: list[BrowseMedia] = [queue_folder()]
     if presets:
         children.append(presets_folder(presets, host, port))
     children.extend(_children_from_result(result, host, port))

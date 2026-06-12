@@ -227,6 +227,63 @@ async def test_play_all_genre_synthesizes_add(hass: HomeAssistant):
     assert ("play_uri", ("/Add?genre=Jazz&service=LocalMusic&playnow=1",)) in play_uris
 
 
+# --- play queue (view + jump-to-track) ----------------------------------
+async def test_root_has_play_queue(hass: HomeAssistant):
+    entity = await _kitchen(hass)
+    root = await entity.async_browse_media()
+    assert "Play queue" in [c.title for c in root.children]
+
+
+async def test_browse_queue_lists_tracks(hass: HomeAssistant):
+    entity = await _kitchen(hass)
+    queue = await entity.async_browse_media(media_content_id="queue")
+    assert len(queue.children) == 3
+    first = queue.children[0]
+    assert first.can_play and "Anything but the Truth" in first.title
+    # selecting a queue track jumps to that position
+    await _play_media(hass, entity, first.media_content_id)
+    assert ("play_uri", ("/Play?id=0",)) in entity.coordinator.client.calls
+
+
+# --- play-queue services -------------------------------------------------
+async def test_clear_queue_service(hass: HomeAssistant):
+    entity = await _kitchen(hass)
+    await hass.services.async_call(
+        DOMAIN, "clear_queue", {"entity_id": entity.entity_id}, blocking=True
+    )
+    assert ("clear_queue", ()) in entity.coordinator.client.calls
+
+
+async def test_save_queue_service(hass: HomeAssistant):
+    entity = await _kitchen(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "save_queue",
+        {"entity_id": entity.entity_id, "name": "Dinner"},
+        blocking=True,
+    )
+    assert ("save_queue", ("Dinner",)) in entity.coordinator.client.calls
+
+
+async def test_remove_and_move_queue_services(hass: HomeAssistant):
+    entity = await _kitchen(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "remove_from_queue",
+        {"entity_id": entity.entity_id, "position": 3},
+        blocking=True,
+    )
+    await hass.services.async_call(
+        DOMAIN,
+        "move_in_queue",
+        {"entity_id": entity.entity_id, "from_position": 5, "to_position": 0},
+        blocking=True,
+    )
+    calls = entity.coordinator.client.calls
+    assert ("delete_track", (3,)) in calls
+    assert ("move_track", (5, 0)) in calls
+
+
 # --- search --------------------------------------------------------------
 async def test_search_returns_results(hass: HomeAssistant):
     entity = await _kitchen(hass)

@@ -8,6 +8,7 @@ from custom_components.bluos.api import (
     BrowseResult,
     InputSource,
     PlayerStatus,
+    Playlist,
     Preset,
     SyncStatus,
 )
@@ -116,3 +117,19 @@ class FakeClient:
 
     async def play_uri(self, uri):
         await self._record("play_uri", uri)
+
+    async def playlist(self, start=None, end=None):
+        await self._record("playlist", start, end)
+        return Playlist.from_xml(load_fixture("playlist.xml"))
+
+    async def clear_queue(self):
+        await self._record("clear_queue")
+
+    async def delete_track(self, position):
+        await self._record("delete_track", position)
+
+    async def move_track(self, old, new):
+        await self._record("move_track", old, new)
+
+    async def save_queue(self, name):
+        await self._record("save_queue", name)

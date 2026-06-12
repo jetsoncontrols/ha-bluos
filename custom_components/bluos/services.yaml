@@ -30,3 +30,56 @@ add_favourite:
       example: "item:eyJiIjoiLi4uIn0="
       selector:
         text:
+
+clear_queue:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+
+save_queue:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+  fields:
+    name:
+      required: true
+      example: "Dinner Music"
+      selector:
+        text:
+
+remove_from_queue:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+  fields:
+    position:
+      required: true
+      example: 3
+      selector:
+        number:
+          min: 0
+          mode: box
+
+move_in_queue:
+  target:
+    entity:
+      domain: media_player
+      integration: bluos
+  fields:
+    from_position:
+      required: true
+      example: 5
+      selector:
+        number:
+          min: 0
+          mode: box
+    to_position:
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          mode: box

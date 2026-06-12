@@ -44,6 +44,9 @@ QUEUE_MODE_TYPES: dict[str, tuple[str, ...]] = {
     "last": ("add-last",),
 }
 
+# Max tracks fetched when viewing the play queue in the media browser.
+QUEUE_VIEW_LIMIT = 500
+
 MP_DOMAIN = "media_player"
 
 STATE_MAP: dict[str, MediaPlayerState] = {
@@ -118,6 +121,23 @@ async def async_setup_entry(
         "add_favourite",
         {vol.Required("media_content_id"): cv.string},
         "async_add_favourite",
+    )
+    platform.async_register_entity_service("clear_queue", None, "async_clear_queue")
+    platform.async_register_entity_service(
+        "save_queue", {vol.Required("name"): cv.string}, "async_save_queue"
+    )
+    platform.async_register_entity_service(
+        "remove_from_queue",
+        {vol.Required("position"): cv.positive_int},
+        "async_remove_from_queue",
+    )
+    platform.async_register_entity_service(
+        "move_in_queue",
+        {
+            vol.Required("from_position"): cv.positive_int,
+            vol.Required("to_position"): cv.positive_int,
+        },
+        "async_move_in_queue",
     )
 
     unit = entry.runtime_data
@@ -289,6 +309,10 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
                 self.coordinator.presets, client.host, client.port
             )
 
+        if cid == browse.QUEUE:
+            playlist = await client.playlist(start=0, end=QUEUE_VIEW_LIMIT)
+            return browse.queue_node(playlist, client.host, client.port)
+
         if cid.startswith(browse.ITEM_PREFIX):
             key = browse.decode_item(cid).get("b")
             if not key:
@@ -423,6 +447,19 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
         if not action:
             raise HomeAssistantError(f"No {what} action available for this item")
         await self.coordinator.client.play_uri(action)
+
+    # --- play-queue services --------------------------------------------
+    async def async_clear_queue(self) -> None:
+        await self.coordinator.client.clear_queue()
+
+    async def async_save_queue(self, name: str) -> None:
+        await self.coordinator.client.save_queue(name)
+
+    async def async_remove_from_queue(self, position: int) -> None:
+        await self.coordinator.client.delete_track(position)
+
+    async def async_move_in_queue(self, from_position: int, to_position: int) -> None:
+        await self.coordinator.client.move_track(from_position, to_position)
 
     # --- transport commands ---------------------------------------------
     async def async_media_play(self) -> None:

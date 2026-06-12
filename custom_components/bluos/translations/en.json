@@ -50,6 +50,44 @@
           "description": "The content ID of a BluOS browse item (from media browse)."
         }
       }
+    },
+    "clear_queue": {
+      "name": "Clear queue",
+      "description": "Remove all tracks from the current play queue."
+    },
+    "save_queue": {
+      "name": "Save queue",
+      "description": "Save the current play queue as a named BluOS playlist.",
+      "fields": {
+        "name": {
+          "name": "Name",
+          "description": "Name for the saved playlist."
+        }
+      }
+    },
+    "remove_from_queue": {
+      "name": "Remove from queue",
+      "description": "Remove the track at the given position from the play queue.",
+      "fields": {
+        "position": {
+          "name": "Position",
+          "description": "Zero-based position of the track to remove."
+        }
+      }
+    },
+    "move_in_queue": {
+      "name": "Move in queue",
+      "description": "Move a track to a new position within the play queue.",
+      "fields": {
+        "from_position": {
+          "name": "From position",
+          "description": "Current zero-based position of the track."
+        },
+        "to_position": {
+          "name": "To position",
+          "description": "New zero-based position for the track."
+        }
+      }
     }
   }
 }

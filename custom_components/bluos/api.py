@@ -308,6 +308,48 @@ class BrowseResult:
         )
 
 
+@dataclass(slots=True)
+class QueueTrack:
+    """One track in the current play queue (`/Playlist`)."""
+
+    id: int  # position in the queue (0-based)
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    image: str | None = None
+    seconds: int | None = None
+
+
+@dataclass(slots=True)
+class Playlist:
+    """The current play queue."""
+
+    id: str | None = None
+    length: int = 0
+    tracks: list[QueueTrack] = field(default_factory=list)
+
+    @classmethod
+    def from_xml(cls, text: str) -> Playlist:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid /Playlist XML: {err}") from err
+        tracks = [
+            QueueTrack(
+                id=_int(song.get("id")),
+                title=song.findtext("title"),
+                artist=song.findtext("art"),
+                album=song.findtext("alb"),
+                image=song.findtext("image") or None,
+                seconds=(
+                    _int(song.findtext("time")) if song.findtext("time") else None
+                ),
+            )
+            for song in root.findall("song")
+        ]
+        return cls(id=root.get("id"), length=_int(root.get("length")), tracks=tracks)
+
+
 class BluOsClient:
     """HTTP client bound to a single player node (host + port)."""
 
@@ -446,6 +488,31 @@ class BluOsClient:
     async def context_menu(self, key: str) -> BrowseResult:
         """Fetch a browse item's context menu (a `<browse type="contextMenu">`)."""
         return await self.browse(key=key)
+
+    # --- play queue ------------------------------------------------------
+    async def playlist(
+        self, start: int | None = None, end: int | None = None
+    ) -> Playlist:
+        params: dict[str, object] = {}
+        if start is not None:
+            params["start"] = start
+        if end is not None:
+            params["end"] = end
+        return Playlist.from_xml(
+            await self._get("Playlist", params or None, timeout=15)
+        )
+
+    async def clear_queue(self) -> None:
+        await self._get("Clear")
+
+    async def delete_track(self, position: int) -> None:
+        await self._get("Delete", {"id": position})
+
+    async def move_track(self, old: int, new: int) -> None:
+        await self._get("Move", {"old": old, "new": new})
+
+    async def save_queue(self, name: str) -> None:
+        await self._get("Save", {"name": name})
 
     async def play_uri(self, uri: str) -> None:
         """GET a ready-made play/action URI verbatim.
