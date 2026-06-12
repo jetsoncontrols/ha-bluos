@@ -342,6 +342,7 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
         play_url = payload.get("p")
         autoplay_url = payload.get("a")
         context_key = payload.get("c")
+        browse_key = payload.get("b")
         add_modes = (MediaPlayerEnqueue.ADD, MediaPlayerEnqueue.NEXT)
 
         if enqueue in add_modes:
@@ -374,6 +375,11 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
             action = browse.pick_play_action(menu)
             if action:
                 await client.play_uri(action)
+                return
+        # Genres/composers have neither: synthesize a /Add from the browseKey.
+        synthesized = browse.synthesize_play_all(browse_key)
+        if synthesized:
+            await client.play_uri(synthesized)
 
     # --- search ----------------------------------------------------------
     async def async_search_media(self, query: SearchMediaQuery) -> SearchMedia:

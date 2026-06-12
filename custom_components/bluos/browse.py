@@ -16,7 +16,7 @@ from __future__ import annotations
 import base64
 import json
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from homeassistant.components.media_player import (
     BrowseMedia,
@@ -48,10 +48,37 @@ _TYPE_TO_CLASS: dict[str, MediaClass] = {
 }
 
 # Container types that are "play all"-able via their context menu even when they
-# expose no direct playURL/autoplayURL (e.g. local-library artists/genres).
+# expose no direct playURL/autoplayURL (e.g. local-library artists).
 _CONTEXT_PLAYABLE_TYPES = frozenset(
     {"artist", "album", "playlist", "composer", "genre", "folder", "track", "audio"}
 )
+
+# Local-library collection filters whose nodes have neither a playURL nor a
+# context menu (e.g. genres, composers), but which /Add can play as a whole.
+_LOCALMUSIC_FILTER_KEYS = ("genre", "composer", "artist", "album", "playlist", "year")
+
+
+def synthesize_play_all(browse_key: str | None) -> str | None:
+    """Build a "play all" /Add action from a LocalMusic browseKey's filter.
+
+    Local-library genres/composers expose no playURL and no context menu, but
+    `/Add?<filter>&service=LocalMusic&playnow=1` plays the whole filtered
+    collection (verified against the device for genres/composers). The filter
+    lives in the browseKey query, e.g. `LocalMusic:MG/Genres?genre=Acoustic+Rock`.
+    """
+    if (
+        not browse_key
+        or not browse_key.startswith("LocalMusic:")
+        or "?" not in browse_key
+    ):
+        return None
+    query = browse_key.split("?", 1)[1]
+    filters = {
+        k: v[0] for k, v in parse_qs(query).items() if k in _LOCALMUSIC_FILTER_KEYS
+    }
+    if not filters:
+        return None
+    return f"/Add?{urlencode(filters)}&service=LocalMusic&playnow=1"
 
 
 def media_url(host: str, port: int, path: str | None) -> str | None:
@@ -91,9 +118,12 @@ def _media_class(item: BrowseItem) -> MediaClass:
 
 
 def _is_playable(item: BrowseItem) -> bool:
-    # A direct play URL, or a "play all"-able container with a context menu.
-    return item.can_play or (
-        item.context_menu_key is not None and item.type in _CONTEXT_PLAYABLE_TYPES
+    # A direct play URL, a "play all"-able container with a context menu, or a
+    # LocalMusic filter collection (genre/composer) playable via /Add.
+    return (
+        item.can_play
+        or (item.context_menu_key is not None and item.type in _CONTEXT_PLAYABLE_TYPES)
+        or synthesize_play_all(item.browse_key) is not None
     )
 
 

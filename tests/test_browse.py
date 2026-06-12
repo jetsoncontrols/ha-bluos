@@ -16,6 +16,7 @@ from custom_components.bluos.browse import (
     item_to_browse_media,
     pick_context_action,
     pick_play_action,
+    synthesize_play_all,
 )
 from custom_components.bluos.const import DOMAIN
 
@@ -86,6 +87,27 @@ def test_context_only_container_is_playable():
     section = BrowseItem(type="section", browse_key="LM:s")
     node2 = item_to_browse_media(section, "h", 11000)
     assert node2.can_expand and not node2.can_play
+
+
+def test_synthesize_play_all_from_localmusic_filter():
+    assert (
+        synthesize_play_all("LocalMusic:MG/Genres?genre=Acoustic+Rock")
+        == "/Add?genre=Acoustic+Rock&service=LocalMusic&playnow=1"
+    )
+    assert (
+        synthesize_play_all("LocalMusic:MG/LocalMusic-Composer?composer=Dan+Reynolds")
+        == "/Add?composer=Dan+Reynolds&service=LocalMusic&playnow=1"
+    )
+    # No filter / not LocalMusic / a plain list -> nothing to synthesize.
+    assert synthesize_play_all("LocalMusic:GG/Genres") is None
+    assert synthesize_play_all("TuneIn:Foo?x=1") is None
+    assert synthesize_play_all(None) is None
+
+
+def test_genre_node_is_playable_via_synthesis():
+    genre = BrowseItem(type="genre", browse_key="LocalMusic:MG/Genres?genre=Jazz")
+    node = item_to_browse_media(genre, "h", 11000)
+    assert node.can_play and node.can_expand
 
 
 # --- source selection ----------------------------------------------------
@@ -192,6 +214,17 @@ async def test_play_all_container_via_context_menu(hass: HomeAssistant):
     play_uris = [c for c in entity.coordinator.client.calls if c[0] == "play_uri"]
     assert play_uris
     assert "playnow=1" in play_uris[-1][1][0] and "shuffle=0" in play_uris[-1][1][0]
+
+
+async def test_play_all_genre_synthesizes_add(hass: HomeAssistant):
+    # A genre has no playURL or context menu; play-all is synthesized from /Add.
+    entity = await _kitchen(hass)
+    cid = encode_item(
+        BrowseItem(type="genre", browse_key="LocalMusic:MG/Genres?genre=Jazz")
+    )
+    await _play_media(hass, entity, cid)
+    play_uris = [c for c in entity.coordinator.client.calls if c[0] == "play_uri"]
+    assert ("play_uri", ("/Add?genre=Jazz&service=LocalMusic&playnow=1",)) in play_uris
 
 
 # --- search --------------------------------------------------------------
