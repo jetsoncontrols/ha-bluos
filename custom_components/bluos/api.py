@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import html
+import re
 from xml.etree import ElementTree as ET
 
 import aiohttp
@@ -670,6 +672,32 @@ class BluOsClient:
     async def install_firmware_update(self) -> None:
         """Trigger the pending firmware install (`GET /upgrade?upgrade=old`)."""
         await self._get("upgrade", {"upgrade": "old"})
+
+    async def diagnostic_log(self, *, timeout: int = 30) -> str:
+        """Fetch the device diagnostic log as readable text.
+
+        Unlike the rest of the API this lives on the device's web port (80,
+        not the BluOS control port) at `/diag?print=1`, and returns an HTML
+        page that wraps the whole log in a single `<pre>` block. We extract
+        that block and unescape entities so callers get plain text instead of
+        300+ KB of markup. The log covers the whole physical unit (it is not
+        per-zone), so it only needs fetching once via any node's host.
+        """
+        url = f"http://{self.host}/diag"
+        try:
+            async with self._session.get(
+                url,
+                params={"print": 1},
+                timeout=aiohttp.ClientTimeout(
+                    total=timeout, sock_connect=CONNECT_TIMEOUT
+                ),
+            ) as resp:
+                resp.raise_for_status()
+                body = await resp.text()
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise BluOsConnectionError(f"{url} failed: {err}") from err
+        match = re.search(r"<pre>(.*)</pre>", body, re.DOTALL | re.IGNORECASE)
+        return html.unescape(match.group(1) if match else body).strip()
 
     # --- browse / search -------------------------------------------------
     async def browse(

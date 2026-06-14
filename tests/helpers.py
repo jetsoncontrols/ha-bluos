@@ -43,6 +43,9 @@ class FakeClient:
     async def status(self, *, etag=None, timeout=None) -> PlayerStatus:
         return status_for(self.port)
 
+    async def diagnostic_log(self, *, timeout=30) -> str:
+        return f"diag for {self.host}"
+
     async def sync_status(self, *, etag=None, timeout=None) -> SyncStatus:
         return sync_for(self.port)
 

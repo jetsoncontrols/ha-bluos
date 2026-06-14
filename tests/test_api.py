@@ -143,6 +143,37 @@ class _Resp:
         return ""
 
 
+class _TextResp(_Resp):
+    def __init__(self, body):
+        self._body = body
+
+    async def text(self):
+        return self._body
+
+
+async def test_diagnostic_log_extracts_pre_block():
+    page = (
+        "<html><head><link rel='stylesheet' href='x.css'></head><body>\n"
+        "<pre>\n<b>shares</b>\nsmbShare::username\tbob\n"
+        "amp &amp; lt &lt;ok&gt;\n</pre>\n</body></html>"
+    )
+
+    class _DiagSession:
+        def get(self, url, **kwargs):
+            # diag lives on the web port (80), not the control port (11000)
+            assert url == "http://1.2.3.4/diag"
+            assert kwargs.get("params") == {"print": 1}
+            return _TextResp(page)
+
+    client = BluOsClient(_DiagSession(), "1.2.3.4", 11000)
+    log = await client.diagnostic_log()
+
+    assert log.startswith("<b>shares</b>")  # chrome stripped, whitespace trimmed
+    assert "smbShare::username\tbob" in log
+    assert "amp & lt <ok>" in log  # HTML entities unescaped
+    assert "stylesheet" not in log and "<pre>" not in log
+
+
 class _RecordingSession:
     def __init__(self):
         self.url = None
