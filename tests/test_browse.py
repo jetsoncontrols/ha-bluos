@@ -95,7 +95,9 @@ def test_synthesize_play_all_from_localmusic_filter():
         == "/Add?genre=Acoustic+Rock&service=LocalMusic&playnow=1"
     )
     assert (
-        synthesize_play_all("LocalMusic:MG/LocalMusic-Composer?composer=Sample+Composer")
+        synthesize_play_all(
+            "LocalMusic:MG/LocalMusic-Composer?composer=Sample+Composer"
+        )
         == "/Add?composer=Sample+Composer&service=LocalMusic&playnow=1"
     )
     # No filter / not LocalMusic / a plain list -> nothing to synthesize.
