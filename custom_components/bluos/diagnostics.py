@@ -42,13 +42,15 @@ async def async_get_config_entry_diagnostics(
     }
 
     # Device diagnostic log (per physical unit, fetched via any node's host).
-    # Intentionally not redacted — this is an internal integration; the log's
-    # MAC/IP/share details are part of what makes it useful for debugging.
+    # Stored as a list of lines so the pretty-printed dump renders one log line
+    # per row instead of one giant \n-escaped string. Intentionally not redacted
+    # — this is an internal integration; the log's MAC/IP/share details are part
+    # of what makes it useful for debugging.
     if unit.coordinators:
         client = unit.coordinators[0].client
         try:
-            result["diagnostic_log"] = await client.diagnostic_log()
+            result["diagnostic_log"] = (await client.diagnostic_log()).split("\n")
         except BluOsError as err:
-            result["diagnostic_log"] = f"<unavailable: {err}>"
+            result["diagnostic_log"] = [f"<unavailable: {err}>"]
 
     return result

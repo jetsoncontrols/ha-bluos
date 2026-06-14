@@ -41,8 +41,9 @@ async def test_diagnostics_includes_log(hass: HomeAssistant):
     entry = await _setup(hass)
     diag = await async_get_config_entry_diagnostics(hass, entry)
 
-    # one log per unit, fetched via the primary node's host (not redacted)
-    assert diag["diagnostic_log"] == "diag for 192.0.2.10"
+    # one log per unit, fetched via the primary node's host (not redacted),
+    # split into a list of lines (tabs within a line preserved)
+    assert diag["diagnostic_log"] == ["host\t192.0.2.10", "state\tok"]
     assert diag["is_multi"] is True
     assert len(diag["nodes"]) == 2
     # the entry block still redacts host/mac
@@ -58,6 +59,6 @@ async def test_diagnostics_log_unavailable(hass: HomeAssistant):
     ):
         diag = await async_get_config_entry_diagnostics(hass, entry)
 
-    # a failed fetch must not break the rest of the dump
-    assert diag["diagnostic_log"].startswith("<unavailable:")
+    # a failed fetch must not break the rest of the dump (still a list)
+    assert diag["diagnostic_log"] == ["<unavailable: boom>"]
     assert len(diag["nodes"]) == 2
