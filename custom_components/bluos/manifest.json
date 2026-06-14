@@ -10,6 +10,6 @@
   "issue_tracker": "https://github.com/jetsoncontrols/ha-bluos/issues",
   "loggers": ["custom_components.bluos"],
   "requirements": [],
-  "version": "1.0.0",
+  "version": "1.0.1",
   "zeroconf": ["_musc._tcp.local.", "_musp._tcp.local."]
 }

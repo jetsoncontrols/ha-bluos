@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from custom_components.bluos.const import DOMAIN
 from custom_components.bluos.coordinator import chassis_identifier
 
+from .helpers import FakeClient
 from .test_init import BASE_MAC, _setup
 
 ZONE2_MAC = "aa:bb:cc:00:11:22:11010"
@@ -54,6 +57,17 @@ async def test_doorbell_button(hass: HomeAssistant):
         "button", "press", {"entity_id": doorbell}, blocking=True
     )
     assert ("doorbell", ()) in _primary(hass).client.calls
+
+
+async def test_doorbell_button_absent_when_unsupported(hass: HomeAssistant):
+    """Speakers without the doorbell feature get no (dead) doorbell button."""
+    with patch.object(FakeClient, "doorbell_supported", False):
+        await _setup(hass)
+    reg = er.async_get(hass)
+    assert reg.async_get_entity_id("button", DOMAIN, f"{BASE_MAC}-doorbell") is None
+    # reboot/reindex are unconditional and still present.
+    assert reg.async_get_entity_id("button", DOMAIN, f"{BASE_MAC}-reboot")
+    assert reg.async_get_entity_id("button", DOMAIN, f"{BASE_MAC}-reindex")
 
 
 async def test_reboot_and_reindex_call_client(hass: HomeAssistant):

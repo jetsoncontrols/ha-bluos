@@ -113,8 +113,13 @@ class FakeClient:
     async def reindex(self):
         await self._record("reindex")
 
+    doorbell_supported = True
+
     async def doorbell(self):
         await self._record("doorbell")
+
+    async def supports_doorbell(self):
+        return self.doorbell_supported
 
     async def firmware_update_available(self):
         return self.firmware_pending

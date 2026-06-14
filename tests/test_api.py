@@ -13,6 +13,7 @@ from custom_components.bluos.api import (
     PlayerStatus,
     Preset,
     SyncStatus,
+    settings_has_node,
 )
 
 from .helpers import load_fixture, status_for, sync_for
@@ -215,6 +216,18 @@ def test_audio_settings_parse():
     vl = s.get("volumeLimits")
     assert vl.kind == "dual-range"
     assert vl.depends_on == ("fixedVolume", "OFF")
+
+
+def test_settings_has_node_detects_doorbell():
+    # CI/custom-install players expose a `doorbell` node; standalone speakers do not.
+    with_db = load_fixture("settings_root_with_doorbell.xml")
+    without_db = load_fixture("settings_root_no_doorbell.xml")
+    assert settings_has_node(with_db, "doorbell")
+    assert not settings_has_node(without_db, "doorbell")
+    # both still expose reindex
+    assert settings_has_node(load_fixture("settings_root_no_doorbell.xml"), "reindex")
+    # malformed XML is treated as "absent", not an error
+    assert not settings_has_node("<broken", "doorbell")
 
 
 def test_audio_settings_unknown_id_is_none():

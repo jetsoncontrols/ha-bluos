@@ -54,6 +54,19 @@ def _float(value: str | None, default: float | None = None) -> float | None:
         return default
 
 
+def settings_has_node(text: str, node_id: str) -> bool:
+    """Whether a `/Settings` menu tree contains a node with the given id.
+
+    Used to gate optional features: e.g. only custom-install players (CI580)
+    expose a `doorbell` node; standalone speakers omit it.
+    """
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return False
+    return any(el.get("id") == node_id for el in root.iter())
+
+
 @dataclass(slots=True)
 class PlayerStatus:
     """Parsed `/Status` response (playback state)."""
@@ -639,6 +652,15 @@ class BluOsClient:
     async def doorbell(self) -> None:
         """Play this node's configured doorbell chime (`/Doorbell?play=1`)."""
         await self._get("Doorbell", {"play": 1})
+
+    async def supports_doorbell(self) -> bool:
+        """Whether the player exposes the doorbell feature.
+
+        The root `/Settings` menu carries a `doorbell` node on players that
+        support it (custom-install units like the CI580); standalone speakers
+        (e.g. Bluesound PULSE M) omit it.
+        """
+        return settings_has_node(await self._get("Settings"), "doorbell")
 
     async def firmware_update_available(self) -> bool:
         """True if `/upgrade` offers an install (the 'Upgrade Now' button)."""

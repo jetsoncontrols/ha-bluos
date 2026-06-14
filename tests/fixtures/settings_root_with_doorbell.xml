@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings schemaVersion="28">
+	<setting id="alarms" displayName="Alarms" icon="/images/settings/ic_alarms.png" class="alarms" count="0" enabled="0"></setting>
+	<setting id="sleep" displayName="Sleep timer" icon="/images/settings/ic_sleeptimer.png" class="sleep" sleep=""></setting>
+	<menuGroup id="doorbell" displayName="Doorbell" icon="/images/settings/ic_doorbell.png" url="/Doorbell" description="Chime 1"></menuGroup>
+	<menuGroup id="audio" defaults="false" displayName="Audio" icon="/images/settings/ic_audio.png" url="/audiomodes"></menuGroup>
+	<menuGroup id="player" displayName="Player" icon="/images/players/CI580_nt.png"></menuGroup>
+	<menuGroup id="library" displayName="Music library" icon="/images/settings/ic_musiclibrary.png">
+		<setting id="reindex" name="reindex" displayName="Reindex music collection" url="/Reindex" icon="/images/settings/ic_reindex.png" class="button"></setting>
+	</menuGroup>
+</settings>

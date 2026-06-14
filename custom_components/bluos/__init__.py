@@ -174,8 +174,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: BluOsConfigEntry) -> boo
         is_multi=is_multi,
     )
 
-    # Firmware/reindex live on the primary node only (unit-wide concerns).
+    # Firmware/reindex/doorbell live on the primary node only (unit-wide).
     await primary.async_refresh_firmware()
+    await primary.async_check_doorbell()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     for coordinator in live:

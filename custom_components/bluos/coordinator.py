@@ -106,6 +106,8 @@ class BluOsCoordinator(DataUpdateCoordinator[BluOsData]):
         self.audio_settings: AudioSettings | None = None
         # Whether /upgrade currently offers a firmware install (checked at setup).
         self.firmware_update_available: bool = False
+        # Whether this player exposes the doorbell feature (CI-only; at setup).
+        self.doorbell_supported: bool = False
         self._status: PlayerStatus | None = None
         self._sync: SyncStatus | None = None
         self._prid: str | None = None
@@ -169,6 +171,13 @@ class BluOsCoordinator(DataUpdateCoordinator[BluOsData]):
         except BluOsConnectionError as err:
             LOGGER.debug("%s firmware check failed: %s", self.name, err)
         self._push()
+
+    async def async_check_doorbell(self) -> None:
+        """Detect whether this player exposes the doorbell feature; best-effort."""
+        try:
+            self.doorbell_supported = await self.client.supports_doorbell()
+        except BluOsConnectionError as err:
+            LOGGER.debug("%s doorbell check failed: %s", self.name, err)
 
     @callback
     def async_start_loops(self) -> None:

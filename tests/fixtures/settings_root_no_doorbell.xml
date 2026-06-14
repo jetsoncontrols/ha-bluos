@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings schemaVersion="28">
+	<setting id="alarms" displayName="Alarms" icon="/images/settings/ic_alarms.png" class="alarms" count="0" enabled="0"></setting>
+	<setting id="sleep" displayName="Sleep timer" icon="/images/settings/ic_sleeptimer.png" class="sleep" sleep=""></setting>
+	<menuGroup id="audio" defaults="false" displayName="Audio" icon="/images/settings/ic_audio.png" url="/audiomodes"></menuGroup>
+	<menuGroup id="player" displayName="Player" icon="/images/players/P230_nt.png"></menuGroup>
+	<menuGroup id="library" displayName="Music library" icon="/images/settings/ic_musiclibrary.png">
+		<setting id="sharecfg" displayName="Network shares" icon="/images/settings/ic_networkshares.png" description="No shares configured" helpUrl="https://support.bluos.net/hc/en-us/articles/360000469948">
+			<webview url="http://10.42.1.166:80/sharecfg?noheader=1"></webview>
+		</setting>
+		<setting id="reindex" name="reindex" displayName="Reindex music collection" url="/Reindex" icon="/images/settings/ic_reindex.png" class="button" description="Reindex your library music collection in case you have recently added or removed music."></setting>
+		<setting id="resizeall" name="resizeall" displayName="Optimize Artwork" url="/setting" icon="/images/settings/ic_optimizeartwork.png" class="boolean" value="OFF" description="Off" explanation="Optimize Artwork will reduce the size of the artwork database when creating your music library. This will improve performance when using the BluOS Controller. However, it can take up to twice as long to create the music library."></setting>
+		<setting id="server" name="server" displayName="Enable Server Mode" url="/setting" icon="/images/USBIcon.png" class="boolean" value="OFF" description="Off" explanation="Server Mode shares the music on a connected USB storage device across the network with other players."></setting>
+	</menuGroup>
+</settings>

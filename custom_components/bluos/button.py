@@ -20,22 +20,24 @@ async def async_setup_entry(
 ) -> None:
     """Unit-wide maintenance buttons on the root device.
 
-    Reboot, reindex and the (unit-wide) doorbell are single buttons issued via
-    the primary node and shown on the chassis/root device on multi-zone units
-    (or the lone node device when standalone).
+    Reboot and reindex are single buttons issued via the primary node and shown
+    on the chassis/root device on multi-zone units (or the lone node device when
+    standalone). The doorbell is only offered when the player actually exposes
+    the feature (custom-install units like the CI580; standalone speakers omit
+    it), to avoid a dead button.
     """
     unit = entry.runtime_data
     primary = unit.coordinators[0]
     root = (
         chassis_identifier(unit.chassis_mac) if unit.is_multi else (DOMAIN, primary.mac)
     )
-    async_add_entities(
-        [
-            BluOsRebootButton(primary, device_id=root),
-            BluOsReindexButton(primary, device_id=root),
-            BluOsDoorbellButton(primary, device_id=root),
-        ]
-    )
+    entities: list[_BluOsButton] = [
+        BluOsRebootButton(primary, device_id=root),
+        BluOsReindexButton(primary, device_id=root),
+    ]
+    if primary.doorbell_supported:
+        entities.append(BluOsDoorbellButton(primary, device_id=root))
+    async_add_entities(entities)
 
 
 class _BluOsButton(CoordinatorEntity[BluOsCoordinator], ButtonEntity):
