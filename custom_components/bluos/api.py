@@ -44,6 +44,16 @@ def _int(value: str | None, default: int = 0) -> int:
             return default
 
 
+def _float(value: str | None, default: float | None = None) -> float | None:
+    """Parse a float from XML text, tolerating empty/garbage values."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 @dataclass(slots=True)
 class PlayerStatus:
     """Parsed `/Status` response (playback state)."""
@@ -65,6 +75,7 @@ class PlayerStatus:
     is_stream: bool = False  # <streamUrl> present -> not playing from the queue
     sync_stat: str | None = None  # mirrors SyncStatus syncStat; flags grouping changes
     prid: str | None = None  # preset revision; changes when presets are edited
+    notify_url: str | None = None  # present when a service message/error is pending
 
     @classmethod
     def from_xml(cls, text: str) -> PlayerStatus:
@@ -93,12 +104,40 @@ class PlayerStatus:
             is_stream=root.find("streamUrl") is not None,
             sync_stat=root.findtext("syncStat"),
             prid=root.findtext("prid"),
+            notify_url=root.findtext("notifyurl") or None,
         )
 
     @property
     def volume_fixed(self) -> bool:
         """Whether this node has a fixed (non-adjustable) output level."""
         return self.volume == FIXED_VOLUME
+
+
+@dataclass(slots=True)
+class Notification:
+    """A `/Status` `<notifyurl>` payload — a message to surface to the user.
+
+    Fetched from the notifyurl (e.g. `/error?291`); the trailing counter makes
+    each message unique. `<message>` is human text, `<url>` clears it, and
+    `<action type>` is how the BluOS app would present it (e.g. "dialog").
+    """
+
+    message: str | None = None
+    clear_url: str | None = None
+    action: str | None = None
+
+    @classmethod
+    def from_xml(cls, text: str) -> Notification:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid notification XML: {err}") from err
+        action = root.find("action")
+        return cls(
+            message=root.findtext("message"),
+            clear_url=root.findtext("url"),
+            action=action.get("type") if action is not None else None,
+        )
 
 
 @dataclass(slots=True)
@@ -116,6 +155,7 @@ class SyncStatus:
     node_id: str | None = None  # "ip:port"
     volume: int = FIXED_VOLUME
     schema_version: str | None = None
+    version: str | None = None  # firmware version (the `version` attribute)
     group: str | None = None
     # Grouping topology. master is set when this node is a group secondary;
     # slaves is populated when this node is the group primary.
@@ -152,6 +192,7 @@ class SyncStatus:
             node_id=root.get("id"),
             volume=_int(root.get("volume"), FIXED_VOLUME),
             schema_version=root.get("schemaVersion"),
+            version=root.get("version"),
             group=root.get("group"),
             master=master,
             slaves=slaves,
@@ -224,6 +265,89 @@ class InputSource:
             )
             for item in root.findall("item")
         ]
+
+
+@dataclass(slots=True)
+class AudioSetting:
+    """One control from `/Settings?id=audio` (a `<setting>` node).
+
+    The device describes each control itself: `kind` is the BluOS `class`
+    (boolean | range | list | dual-range | button | text); `options` holds
+    (name, display) pairs for lists; range bounds come from the child
+    `<value>`; `depends_on` gates visibility on another setting's value.
+    Writes POST `id=value` to `url` (the setting's own `url`, else the parent
+    menu's `url` — e.g. tone controls post to `/alsa_setting`, the rest to
+    `/audiomodes`).
+    """
+
+    id: str
+    value: str | None
+    kind: str | None
+    url: str
+    options: list[tuple[str, str]] = field(default_factory=list)
+    minimum: float | None = None
+    maximum: float | None = None
+    step: float | None = None
+    units: str | None = None
+    depends_on: tuple[str, str] | None = None
+
+
+@dataclass(slots=True)
+class AudioSettings:
+    """Parsed `/Settings?id=audio` — a node's audio control menu, keyed by id."""
+
+    by_id: dict[str, AudioSetting] = field(default_factory=dict)
+
+    def get(self, setting_id: str) -> AudioSetting | None:
+        return self.by_id.get(setting_id)
+
+    @classmethod
+    def from_xml(cls, text: str) -> AudioSettings:
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise BluOsConnectionError(f"Invalid /Settings XML: {err}") from err
+        by_id: dict[str, AudioSetting] = {}
+        for group in root.iter("menuGroup"):
+            group_url = group.get("url") or ""
+            for el in group.findall("setting"):
+                sid = el.get("id")
+                if not sid:
+                    continue
+                kind = el.get("class")
+                options: list[tuple[str, str]] = []
+                minimum = maximum = step = None
+                units = None
+                if kind == "list":
+                    options = [
+                        (v.get("name", ""), v.get("displayName") or v.get("name", ""))
+                        for v in el.findall("value")
+                    ]
+                else:
+                    constraint = el.find("value")
+                    if constraint is not None:
+                        minimum = _float(constraint.get("min"))
+                        maximum = _float(constraint.get("max"))
+                        step = _float(constraint.get("step"))
+                        units = constraint.get("units")
+                dep = el.find("dependsOn")
+                by_id[sid] = AudioSetting(
+                    id=sid,
+                    value=el.get("value"),
+                    kind=kind,
+                    url=el.get("url") or group_url,
+                    options=options,
+                    minimum=minimum,
+                    maximum=maximum,
+                    step=step,
+                    units=units,
+                    depends_on=(
+                        (dep.get("name", ""), dep.get("value", ""))
+                        if dep is not None
+                        else None
+                    ),
+                )
+        return cls(by_id=by_id)
 
 
 @dataclass(slots=True)
@@ -379,6 +503,20 @@ class BluOsClient:
         except (TimeoutError, aiohttp.ClientError) as err:
             raise BluOsConnectionError(f"{url} failed: {err}") from err
 
+    async def _post(self, path: str, data: dict[str, object]) -> str:
+        """POST x-www-form-urlencoded data; return the response body text."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        try:
+            async with self._session.post(
+                url,
+                data=data,
+                timeout=aiohttp.ClientTimeout(total=10, sock_connect=CONNECT_TIMEOUT),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.text()
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise BluOsConnectionError(f"{url} failed: {err}") from err
+
     # --- queries ---------------------------------------------------------
     async def status(
         self, *, etag: str | None = None, timeout: int | None = None
@@ -428,6 +566,10 @@ class BluOsClient:
     async def back(self) -> None:
         await self._get("Back")
 
+    async def seek(self, position: int) -> None:
+        """Seek to an absolute position (seconds) in the current track."""
+        await self._get("Play", {"seek": max(0, position)})
+
     async def set_shuffle(self, shuffle: bool) -> None:
         await self._get("Shuffle", {"state": 1 if shuffle else 0})
 
@@ -436,14 +578,23 @@ class BluOsClient:
         await self._get("Repeat", {"state": repeat})
 
     # --- volume ----------------------------------------------------------
-    async def set_volume(self, level: int) -> None:
-        await self._get("Volume", {"level": max(0, min(100, level))})
+    async def set_volume(self, level: int, *, tell_slaves: bool = False) -> None:
+        params: dict[str, object] = {"level": max(0, min(100, level))}
+        if tell_slaves:
+            params["tell_slaves"] = 1
+        await self._get("Volume", params)
 
-    async def volume_step(self, db: int) -> None:
-        await self._get("Volume", {"db": db})
+    async def volume_step(self, db: int, *, tell_slaves: bool = False) -> None:
+        params: dict[str, object] = {"db": db}
+        if tell_slaves:
+            params["tell_slaves"] = 1
+        await self._get("Volume", params)
 
-    async def set_mute(self, mute: bool) -> None:
-        await self._get("Volume", {"mute": 1 if mute else 0})
+    async def set_mute(self, mute: bool, *, tell_slaves: bool = False) -> None:
+        params: dict[str, object] = {"mute": 1 if mute else 0}
+        if tell_slaves:
+            params["tell_slaves"] = 1
+        await self._get("Volume", params)
 
     # --- grouping --------------------------------------------------------
     async def add_slave(self, slave_host: str, slave_port: int) -> None:
@@ -466,6 +617,37 @@ class BluOsClient:
 
     async def select_input(self, type_index: str) -> None:
         await self._get("Play", {"inputTypeIndex": type_index})
+
+    # --- audio settings (per node) --------------------------------------
+    async def audio_settings(self) -> AudioSettings:
+        """Fetch the node's audio control menu (`/Settings?id=audio`)."""
+        return AudioSettings.from_xml(await self._get("Settings", {"id": "audio"}))
+
+    async def set_audio_setting(self, name: str, value: str, *, url: str) -> None:
+        """Write one audio setting (POST `name=value` to its endpoint)."""
+        await self._post(url, {name: value})
+
+    # --- maintenance (undocumented endpoints) ---------------------------
+    async def reboot(self) -> None:
+        """Soft-reboot this node (`POST /reboot`)."""
+        await self._post("reboot", {"yes": 1})
+
+    async def reindex(self) -> None:
+        """Rebuild the music-library index (`GET /Reindex`)."""
+        await self._get("Reindex")
+
+    async def doorbell(self) -> None:
+        """Play this node's configured doorbell chime (`/Doorbell?play=1`)."""
+        await self._get("Doorbell", {"play": 1})
+
+    async def firmware_update_available(self) -> bool:
+        """True if `/upgrade` offers an install (the 'Upgrade Now' button)."""
+        body = await self._get("upgrade")
+        return "upgrade: 'old'" in body
+
+    async def install_firmware_update(self) -> None:
+        """Trigger the pending firmware install (`GET /upgrade?upgrade=old`)."""
+        await self._get("upgrade", {"upgrade": "old"})
 
     # --- browse / search -------------------------------------------------
     async def browse(
@@ -530,6 +712,20 @@ class BluOsClient:
             ) as resp:
                 resp.raise_for_status()
                 await resp.read()
+        except (TimeoutError, aiohttp.ClientError) as err:
+            raise BluOsConnectionError(f"{full} failed: {err}") from err
+
+    async def notification(self, notify_url: str) -> Notification:
+        """Fetch a `/Status` notifyurl payload (GET verbatim, already-encoded)."""
+        path = notify_url if notify_url.startswith("/") else f"/{notify_url}"
+        full = URL(f"{self.base_url}{path}", encoded=True)
+        try:
+            async with self._session.get(
+                full,
+                timeout=aiohttp.ClientTimeout(total=10, sock_connect=CONNECT_TIMEOUT),
+            ) as resp:
+                resp.raise_for_status()
+                return Notification.from_xml(await resp.text())
         except (TimeoutError, aiohttp.ClientError) as err:
             raise BluOsConnectionError(f"{full} failed: {err}") from err
 

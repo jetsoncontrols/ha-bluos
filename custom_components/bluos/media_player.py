@@ -90,11 +90,6 @@ VOLUME_FEATURES = (
 )
 
 
-def chassis_identifier(base_mac: str) -> tuple[str, str]:
-    """Device-registry identifier for the (entity-less) chassis parent device."""
-    return (DOMAIN, f"unit-{base_mac}")
-
-
 def _audio_only(item: BrowseMedia) -> bool:
     """media_source content filter: keep audio playables (folders are kept)."""
     return bool(item.media_content_type) and item.media_content_type.startswith(
@@ -159,17 +154,9 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
         self._unit = unit
         self._attr_unique_id = coordinator.mac
 
-        sync = coordinator.data.sync
-        device = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.mac)},
-            name=sync.name,
-            manufacturer=sync.brand,
-            model=sync.model_name,
-            configuration_url=f"http://{coordinator.host}",
-        )
-        if unit.is_multi:
-            device["via_device"] = chassis_identifier(unit.chassis_mac)
-        self._attr_device_info = device
+        # The node's device (name/model/output/firmware/via_device) is created
+        # up front in async_setup_entry; here we just attach to it.
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, coordinator.mac)})
 
     # --- helpers ---------------------------------------------------------
     @property
@@ -184,6 +171,8 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
         features = BASE_FEATURES
+        if self._status.can_seek:
+            features |= MediaPlayerEntityFeature.SEEK
         if not self._status.volume_fixed:
             features |= VOLUME_FEATURES
         return features
@@ -477,6 +466,9 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
     async def async_media_previous_track(self) -> None:
         await self.coordinator.client.back()
 
+    async def async_media_seek(self, position: float) -> None:
+        await self.coordinator.client.seek(int(position))
+
     async def async_set_shuffle(self, shuffle: bool) -> None:
         await self.coordinator.client.set_shuffle(shuffle)
 
@@ -484,17 +476,28 @@ class BluOsMediaPlayer(CoordinatorEntity[BluOsCoordinator], MediaPlayerEntity):
         await self.coordinator.client.set_repeat(REPEAT_HA_TO_DEVICE[repeat])
 
     # --- volume commands -------------------------------------------------
+    @property
+    def _is_group_primary(self) -> bool:
+        """True when this node leads a group, so volume should move the group."""
+        return bool(self._sync.slaves)
+
     async def async_set_volume_level(self, volume: float) -> None:
-        await self.coordinator.client.set_volume(round(volume * 100))
+        await self.coordinator.client.set_volume(
+            round(volume * 100), tell_slaves=self._is_group_primary
+        )
 
     async def async_volume_up(self) -> None:
-        await self.coordinator.client.volume_step(VOLUME_STEP_DB)
+        await self.coordinator.client.volume_step(
+            VOLUME_STEP_DB, tell_slaves=self._is_group_primary
+        )
 
     async def async_volume_down(self) -> None:
-        await self.coordinator.client.volume_step(-VOLUME_STEP_DB)
+        await self.coordinator.client.volume_step(
+            -VOLUME_STEP_DB, tell_slaves=self._is_group_primary
+        )
 
     async def async_mute_volume(self, mute: bool) -> None:
-        await self.coordinator.client.set_mute(mute)
+        await self.coordinator.client.set_mute(mute, tell_slaves=self._is_group_primary)
 
     # --- grouping --------------------------------------------------------
     async def async_join_players(self, group_members: list[str]) -> None:

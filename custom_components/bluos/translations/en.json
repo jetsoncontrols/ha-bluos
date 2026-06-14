@@ -26,6 +26,25 @@
       "cannot_connect": "Failed to connect"
     }
   },
+  "entity": {
+    "button": {
+      "doorbell": { "name": "Doorbell" },
+      "reboot": { "name": "Reboot" },
+      "reindex": { "name": "Reindex music library" }
+    },
+    "switch": {
+      "tone_controls": { "name": "Tone controls" },
+      "fixed_output": { "name": "Output level fixed" }
+    },
+    "number": {
+      "treble": { "name": "Treble" },
+      "bass": { "name": "Bass" }
+    },
+    "select": {
+      "replay_gain": { "name": "Replay-gain" },
+      "output_mode": { "name": "Output mode" }
+    }
+  },
   "services": {
     "add_to_queue": {
       "name": "Add to queue",

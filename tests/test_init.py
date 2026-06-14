@@ -10,7 +10,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.bluos.const import CONF_HOST, CONF_MAC, CONF_NODES, DOMAIN
-from custom_components.bluos.media_player import chassis_identifier
+from custom_components.bluos.coordinator import chassis_identifier
 
 from .helpers import FakeClient
 
@@ -96,6 +96,21 @@ async def test_device_hierarchy_via_chassis(hass: HomeAssistant):
     assert zone1.configuration_url == "http://192.0.2.10"
 
 
+async def test_multizone_device_shows_output_and_firmware(hass: HomeAssistant):
+    await _setup(hass)
+    dev_reg = dr.async_get(hass)
+
+    zone1 = dev_reg.async_get_device(identifiers={(DOMAIN, BASE_MAC)})
+    # Precise model (CI580v2) + physical output; friendly name stays "NAD CI580".
+    assert zone1.model == "CI580v2 (Output 1)"
+    assert zone1.sw_version == "4.16.6"
+
+    kitchen = dev_reg.async_get_device(
+        identifiers={(DOMAIN, "aa:bb:cc:00:11:22:11020")}
+    )
+    assert kitchen.model == "CI580v2 (Output 3)"
+
+
 async def test_transport_command_calls_client(hass: HomeAssistant):
     await _setup(hass)
     ent_reg = er.async_get(hass)
@@ -106,6 +121,36 @@ async def test_transport_command_calls_client(hass: HomeAssistant):
     )
     coordinator = hass.data[DOMAIN].coordinators_by_addr[("192.0.2.10", 11000)]
     assert ("play", ()) in coordinator.client.calls
+
+
+async def test_group_primary_volume_propagates_to_slaves(hass: HomeAssistant):
+    await _setup(hass)
+    ent_reg = er.async_get(hass)
+    # Kitchen is the variable-volume zone, so volume_set is supported on it.
+    kitchen = ent_reg.async_get_entity_id(
+        "media_player", DOMAIN, "aa:bb:cc:00:11:22:11020"
+    )
+    coord = hass.data[DOMAIN].coordinators_by_addr[("192.0.2.10", 11020)]
+
+    # Not grouped -> do not tell slaves.
+    coord.data.sync.slaves = []
+    await hass.services.async_call(
+        "media_player",
+        "volume_set",
+        {"entity_id": kitchen, "volume_level": 0.3},
+        blocking=True,
+    )
+    assert ("set_volume", (30, False)) in coord.client.calls
+
+    # Leading a group -> propagate volume to the slaves.
+    coord.data.sync.slaves = [("192.0.2.10", 11000)]
+    await hass.services.async_call(
+        "media_player",
+        "volume_set",
+        {"entity_id": kitchen, "volume_level": 0.5},
+        blocking=True,
+    )
+    assert ("set_volume", (50, True)) in coord.client.calls
 
 
 async def test_join_calls_add_slave(hass: HomeAssistant):

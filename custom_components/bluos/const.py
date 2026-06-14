@@ -38,6 +38,9 @@ VOLUME_STEP_DB: Final = 3  # dB applied per volume up/down step
 
 MANUFACTURER_FALLBACK: Final = "BluOS"
 
+# Bus event fired when a node surfaces a service message/error (/Status notifyurl).
+EVENT_NOTIFICATION: Final = "bluos_notification"
+
 # --- LSDP discovery (Lenbrook Service Discovery Protocol) -----------------
 LSDP_PORT: Final = 11430
 LSDP_MAGIC: Final = b"LSDP"

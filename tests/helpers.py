@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from custom_components.bluos.api import (
+    AudioSettings,
     BrowseResult,
     InputSource,
+    Notification,
     PlayerStatus,
     Playlist,
     Preset,
@@ -62,14 +64,14 @@ class FakeClient:
     async def back(self):
         await self._record("back")
 
-    async def set_volume(self, level):
-        await self._record("set_volume", level)
+    async def set_volume(self, level, *, tell_slaves=False):
+        await self._record("set_volume", level, tell_slaves)
 
-    async def volume_step(self, db):
-        await self._record("volume_step", db)
+    async def volume_step(self, db, *, tell_slaves=False):
+        await self._record("volume_step", db, tell_slaves)
 
-    async def set_mute(self, mute):
-        await self._record("set_mute", mute)
+    async def set_mute(self, mute, *, tell_slaves=False):
+        await self._record("set_mute", mute, tell_slaves)
 
     async def set_shuffle(self, shuffle):
         await self._record("set_shuffle", shuffle)
@@ -95,6 +97,34 @@ class FakeClient:
 
     async def select_input(self, type_index):
         await self._record("select_input", type_index)
+
+    async def audio_settings(self):
+        return AudioSettings.from_xml(load_fixture("settings_audio.xml"))
+
+    async def set_audio_setting(self, name, value, *, url):
+        await self._record("set_audio_setting", name, value, url)
+
+    # --- maintenance ----------------------------------------------------
+    firmware_pending = False
+
+    async def reboot(self):
+        await self._record("reboot")
+
+    async def reindex(self):
+        await self._record("reindex")
+
+    async def doorbell(self):
+        await self._record("doorbell")
+
+    async def firmware_update_available(self):
+        return self.firmware_pending
+
+    async def install_firmware_update(self):
+        await self._record("install_firmware_update")
+
+    async def notification(self, url):
+        await self._record("notification", url)
+        return Notification.from_xml(load_fixture("notification_error.xml"))
 
     async def browse(self, key=None, q=None):
         await self._record("browse", key, q)

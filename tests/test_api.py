@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from custom_components.bluos.api import (
+    AudioSettings,
     BluOsClient,
     BluOsConnectionError,
     BrowseResult,
@@ -137,13 +138,24 @@ class _Resp:
     async def read(self):
         return b""
 
+    async def text(self):
+        return ""
+
 
 class _RecordingSession:
     def __init__(self):
         self.url = None
+        self.params = None
+        self.data = None
 
     def get(self, url, **kwargs):
         self.url = url
+        self.params = kwargs.get("params")
+        return _Resp()
+
+    def post(self, url, **kwargs):
+        self.url = url
+        self.data = kwargs.get("data")
         return _Resp()
 
 
@@ -154,3 +166,65 @@ async def test_play_uri_does_not_double_encode():
     url = str(session.url)
     assert url.startswith("http://1.2.3.4:11000/Play?url=Capture%3A")
     assert "%253A" not in url  # already-encoded %3A must be preserved verbatim
+
+
+async def test_seek_builds_play_seek_request():
+    session = _RecordingSession()
+    client = BluOsClient(session, "1.2.3.4", 11000)
+    await client.seek(42)
+    assert str(session.url) == "http://1.2.3.4:11000/Play"
+    assert session.params == {"seek": 42}
+
+
+async def test_seek_clamps_negative_to_zero():
+    session = _RecordingSession()
+    client = BluOsClient(session, "1.2.3.4", 11000)
+    await client.seek(-5)
+    assert session.params == {"seek": 0}
+
+
+def test_audio_settings_parse():
+    s = AudioSettings.from_xml(load_fixture("settings_audio.xml"))
+
+    tone = s.get("eq-switch-1")
+    assert tone.kind == "boolean"
+    assert tone.value == "OFF"
+    assert tone.url == "/alsa_setting"  # own url
+
+    treble = s.get("eq-treble-1")
+    assert treble.kind == "range"
+    assert (treble.minimum, treble.maximum, treble.step) == (-6.0, 6.0, 0.5)
+    assert treble.units == "dB"
+    assert treble.depends_on == ("eq-switch-1", "ON")
+
+    rg = s.get("replayGainMode")
+    assert rg.kind == "list"
+    assert rg.value == "none"
+    assert ("track", "Track gain") in rg.options
+    assert ("smart", "Smart gain") in rg.options
+
+    cm = s.get("channelMode")
+    assert ("mono", "Mono") in cm.options
+    assert ("default", "Stereo") in cm.options
+
+    # no own url -> inherits the menuGroup url
+    fixed = s.get("fixedVolume")
+    assert fixed.kind == "boolean"
+    assert fixed.url == "/audiomodes"
+
+    vl = s.get("volumeLimits")
+    assert vl.kind == "dual-range"
+    assert vl.depends_on == ("fixedVolume", "OFF")
+
+
+def test_audio_settings_unknown_id_is_none():
+    s = AudioSettings.from_xml(load_fixture("settings_audio.xml"))
+    assert s.get("nope") is None
+
+
+async def test_set_audio_setting_posts_to_url():
+    session = _RecordingSession()
+    client = BluOsClient(session, "1.2.3.4", 11000)
+    await client.set_audio_setting("eq-treble-1", "3", url="/alsa_setting")
+    assert str(session.url) == "http://1.2.3.4:11000/alsa_setting"
+    assert session.data == {"eq-treble-1": "3"}

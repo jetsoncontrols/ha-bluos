@@ -14,9 +14,13 @@ It exposes one `media_player` entity per player **node**. Most BluOS products ar
 
 - **Auto-discovery** — zeroconf/mDNS **and** Lenbrook **LSDP** (UDP broadcast, for networks where multicast is unreliable), plus manual IP entry that auto-enumerates every zone of a multi-zone unit.
 - **One entity per player node** — multi-zone units appear as a parent device (e.g. *NAD CI580*) with each zone "connected via" it.
-- **Transport** — play, pause, stop, next, previous, shuffle, repeat.
+- **Transport** — play, pause, stop, next, previous, shuffle, repeat, and **seek** (on seekable sources).
 - **Volume & mute** — shown only on nodes with an adjustable level; fixed line-level outputs correctly omit volume controls.
-- **Speaker grouping** — join/unjoin from the HA media UI, including across separate BluOS units.
+- **Speaker grouping** — join/unjoin from the HA media UI, including across separate BluOS units; the group leader's volume/mute moves the whole group (preserving each speaker's balance).
+- **Per-zone audio settings** — tone controls, treble/bass, replay-gain, output mode and output-level-fixed exposed as configuration entities (where the hardware supports them).
+- **Firmware updates** — surfaced as a native Home Assistant `update` entity (Settings → Updates), with an install button.
+- **Device maintenance** — reboot, reindex music library, and a unit-wide doorbell chime, on the chassis device.
+- **Status events** — service messages/errors from the player are emitted as a `bluos_notification` bus event for automations.
 - **Sources** — physical inputs (Analog, Optical, …) and saved presets in the Source dropdown.
 - **Browse, search & play** — the full BluOS tree (services, radio, playlists, your library) plus the Home Assistant media library; **"Play all"** on albums, artists and genres; `play_media` with `enqueue`; TTS/announcements via `media_source`.
 - **Play queue** — view the current queue in the media browser (tap a track to jump), plus services to clear/save/remove/move tracks.

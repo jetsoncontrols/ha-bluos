@@ -16,19 +16,28 @@ from .const import (
     CONF_HOST,
     CONF_MAC,
     CONF_NODES,
+    DEFAULT_PORT,
     DOMAIN,
     MANUFACTURER_FALLBACK,
+    ZONE_PORT_STEP,
 )
 from .coordinator import (
     BluOsConfigEntry,
     BluOsCoordinator,
     BluOsRuntimeData,
+    chassis_identifier,
     normalize_mac,
 )
 from .lsdp import LsdpDiscovery, LsdpUnit
-from .media_player import chassis_identifier
 
-PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER]
+PLATFORMS: list[Platform] = [
+    Platform.BUTTON,
+    Platform.MEDIA_PLAYER,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SWITCH,
+    Platform.UPDATE,
+]
 
 
 @dataclass(slots=True)
@@ -115,11 +124,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: BluOsConfigEntry) -> boo
         data.coordinators_by_addr[(coordinator.host, coordinator.port)] = coordinator
 
     brand = primary.data.sync.brand or MANUFACTURER_FALLBACK
-    model = primary.data.sync.model_name or primary.data.sync.model or "Player"
-    chassis_name = f"{brand} {model}"
+    # `modelName` ("CI580") is the friendly name; `model` ("CI580v2") is the
+    # precise model used for the device model field.
+    display_model = primary.data.sync.model_name or primary.data.sync.model or "Player"
+    model = primary.data.sync.model or display_model
+    chassis_name = f"{brand} {display_model}"
 
+    dev_reg = dr.async_get(hass)
     if is_multi:
-        dr.async_get(hass).async_get_or_create(
+        dev_reg.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={chassis_identifier(base_mac)},
             connections={(dr.CONNECTION_NETWORK_MAC, base_mac)},
@@ -129,12 +142,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: BluOsConfigEntry) -> boo
             configuration_url=f"http://{host}",
         )
 
+    # Create each node's device up front (before forwarding platforms) so every
+    # entity domain attaches to a fully-named device regardless of platform
+    # setup order. The per-node model carries the physical output on multi-zone
+    # units; sw_version carries the firmware.
+    for coordinator in live:
+        sync = coordinator.data.sync
+        node_model = sync.model or sync.model_name
+        extra: dict = {}
+        if is_multi:
+            output = (coordinator.port - DEFAULT_PORT) // ZONE_PORT_STEP + 1
+            node_model = (
+                f"{node_model} (Output {output})" if node_model else f"Output {output}"
+            )
+            extra["via_device"] = chassis_identifier(base_mac)
+        dev_reg.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, coordinator.mac)},
+            name=sync.name,
+            manufacturer=sync.brand or MANUFACTURER_FALLBACK,
+            model=node_model,
+            sw_version=sync.version,
+            configuration_url=f"http://{coordinator.host}",
+            **extra,
+        )
+
     entry.runtime_data = BluOsRuntimeData(
         coordinators=live,
         chassis_mac=base_mac,
         chassis_name=chassis_name,
         is_multi=is_multi,
     )
+
+    # Firmware/reindex live on the primary node only (unit-wide concerns).
+    await primary.async_refresh_firmware()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     for coordinator in live:
