@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import BluOsClient
@@ -38,6 +38,10 @@ PLATFORMS: list[Platform] = [
     Platform.SWITCH,
     Platform.UPDATE,
 ]
+
+# This integration is configured only via config entries / discovery, never
+# YAML, so reject any `bluos:` YAML config (also silences the hassfest warning).
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 @dataclass(slots=True)

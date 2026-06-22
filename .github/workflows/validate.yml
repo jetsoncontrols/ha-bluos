@@ -24,3 +24,7 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # `bluos` is not registered in the home-assistant/brands repo
+          # (this is a PolyForm Noncommercial integration, not bound for the
+          # default HACS/HA store), so skip the brands asset check.
+          ignore: brands
